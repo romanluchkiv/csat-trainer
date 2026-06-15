@@ -1,0 +1,74 @@
+{
+  "case_title": "Case 4",
+  "case_language": "English",
+  "customer_profile": {
+    "situation": "Frances booked transport for next-day travel but the booking remained unconfirmed less than 24 hours before departure. She urgently needed confirmation or refund to make alternative arrangements.",
+    "emotional_state": "anxious",
+    "personality_notes": "Writes short, direct messages (1-3 sentences typical) with polite but businesslike tone. Initially gives benefit of doubt with professional courtesy ('Thanks, Frances'), but becomes noticeably shorter and more clipped if agent delays or misses the urgency. Uses structured language when explaining situation clearly, but doesn't write formal letters or cite policies unless agent forces escalation through inaction."
+  },
+  "opening_message": "I need to urgently get to my next destination for tomorrow and I am still awaiting confirmation. It is now under 24 hours until my journey and if this journey is cancelled it will significantly delay my journey and I will be very reluctant to use 12GoAsia again. I've been checking my email constantly and there's just nothing. This is really stressful because I need to know if I should book something else or not. Hence I think a refund is the most appropriate so I can make other arrangements. Are you able to help? Thanks, Frances",
+  "context_for_agent": "Customer has an unconfirmed booking departing within 24 hours for an urgent connection. When bookings fail to confirm in reasonable time (especially approaching departure), 12Go should proactively contact operator, escalate internally, and offer refund if confirmation cannot be secured quickly. Time-sensitive travel requires urgent action, not standard processing timelines.",
+  "internal_process_gaps": [
+    "Agent took 4+ hours to escalate to operator despite customer flagging urgency and <24 hour departure window",
+    "No proactive monitoring system flagged that booking remained unconfirmed approaching departure time",
+    "Internal note 'Please double-check and refund if necessary' was left unactioned for days with no follow-up",
+    "No escalation path for time-critical bookings that would trigger same-day resolution",
+    "Failed to process refund immediately when operator failed to confirm in time for travel"
+  ],
+  "agent_mistakes_observed": [
+    {
+      "mistake": "Initial response treated urgent <24hr issue as routine 'pending booking' with generic macro",
+      "impact": "Customer had to re-explain urgency and explicitly request refund"
+    },
+    {
+      "mistake": "Took 4+ hours to begin operator contact despite customer stating 'urgently' and '<24 hours until journey'",
+      "impact": "Ate into customer's window to book alternative transport"
+    },
+    {
+      "mistake": "Left internal note about refund but never followed through or assigned ownership",
+      "impact": "Customer received no resolution, likely missed their journey entirely"
+    },
+    {
+      "mistake": "Sent 'hope your trip went well' message 3+ days after departure date without confirming booking or issuing refund",
+      "impact": "Demonstrates complete failure to track case outcome; customer received neither confirmed ticket nor refund"
+    }
+  ],
+  "red_flag_phrases": [
+    "We hope your trip went well (sent when agent never confirmed the booking or provided solution, implying customer managed somehow despite lack of support)",
+    "If you need any help, please feel free to let us know (sent as case closure when the original urgent request was never resolved)",
+    "We are sorry for the delayed response. Due to the high volume of requests during the sensitive time (used as excuse for fundamental service failure 3 days after the fact)"
+  ],
+  "ideal_response_qualities": [
+    "Immediately recognizes urgency keywords: 'urgent', 'tomorrow', 'under 24 hours', 'significantly delay'",
+    "Escalates to operator within 1 hour maximum for <24hr unconfirmed bookings",
+    "Sets clear expectation with customer: 'I will contact operator now and update you within 2 hours'",
+    "Proactively offers refund if confirmation cannot be secured within timeframe that allows alternative booking",
+    "Assigns single point of ownership to prevent case from being dropped",
+    "Confirms with customer what actually happened: did they travel, did they book alternative, what outcome do they need",
+    "Processes refund immediately when operator fails to confirm in time, not days later",
+    "Acknowledges impact: 'I understand this affected your onward travel plans and apologize for the stress this caused'"
+  ],
+  "csat_drivers": {
+    "what_would_earn_5": "Agent responds within 30 minutes, immediately contacts operator, secures confirmation within 2 hours OR proactively issues refund with apology and discount code for next booking before customer misses their travel window. Follows up to confirm customer was able to make alternative arrangements.",
+    "what_would_earn_1": "Exactly what happened: treating urgent <24hr issue as routine, taking 4+ hours to escalate, leaving customer without solution, allowing them to miss their journey, never processing refund, and sending tone-deaf 'hope your trip went well' message days later when the agent provided no working ticket or refund."
+  },
+  "max_turns": 5,
+  "source_ticket_id": 784988,
+  "source_csat_score": "bad",
+  "booking_facts": {
+    "departure_date": "{{TOMORROW_PLUS_HOURS_18}}",
+    "route": "Hanoi → Da Nang",
+    "operator_name": "QH Discovery Travel",
+    "booking_status": "pending",
+    "refund_policy": "Non-refundable per operator policy",
+    "customer_country": "Vietnam",
+    "additional_notes": "Customer wrote in <24h before departure with booking still unconfirmed. Required urgent confirmation or refund to make alternative arrangements. Departure date has now passed without confirmation."
+  },
+  "applicable_tou_clauses": [],
+  "customer_name": "Frances Mitchell",
+  "booking_id": "7849821",
+  "pickup_address": "Hanoi Central Hotel, 44 Trang Tien Street, Hoan Kiem District, Hanoi",
+  "dropoff_address": "Da Nang Beach Resort, 216 Vo Nguyen Giap Street, Son Tra District, Da Nang",
+  "confirmation_type": "manual",
+  "it_context": ""
+}

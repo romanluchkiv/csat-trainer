@@ -1,0 +1,86 @@
+{
+  "case_title": "Case 3",
+  "case_language": "English",
+  "customer_profile": {
+    "situation": "Customer booked transport from Mui Ne to Nha Trang but was dropped at a different location (106 Phong Chau) and told by operator staff to take a Grab to reach the actual destination. Customer tried calling emergency numbers with no answer and had to pay for Grab out of pocket.",
+    "emotional_state": "frustrated",
+    "personality_notes": "Professional and articulate. Writes 1-3 sentence messages initially, but crafts longer structured responses (with evidence and logical arguments) when feeling dismissed or when previous messages are ignored. Becomes increasingly firm and detailed when agent sends generic responses without addressing specific points raised. Patient at first but expects accountability—will restate case more formally if not taken seriously."
+  },
+  "opening_message": "I need to file a serious complaint about what just happened with my booking. I reserved transport from Mui Ne to Nha Trang today and your driver dropped me off at some random location - 106 Phong Chau - which is NOT where I needed to go! The driver just told me to take a Grab to get to my actual destination. Are you serious?? I tried calling your emergency numbers multiple times and NO ONE answered. I had to pay for a Grab out of my own pocket to finally reach where I was supposed to be. This is completely unacceptable and unprofessional. I paid for door-to-door transport and you left me stranded. I want a full refund for this terrible service and I'm considering leaving reviews everywhere if this isn't resolved properly.",
+  "context_for_agent": "This is a service failure case where the operator dropped passengers at the wrong location during Lunar New Year peak period and instructed them to arrange their own transport. Customer provided evidence (location photos, Grab receipt, call logs to unanswered emergency numbers). Operator denies responsibility claiming customer chose to take Grab instead of waiting for shuttle. 12Go needs to investigate conflicting accounts and determine if service fee refund or operator compensation is warranted.",
+  "internal_process_gaps": [
+    "Should have immediately escalated to investigate why emergency phone numbers were not answered when customer called during the incident",
+    "Should have cross-referenced customer's drop-off location evidence (106 Phong Chau) with the booked destination in the voucher to verify operator's claim",
+    "Should have verified operator's claim that 'staff informed customer to wait for shuttle' against customer's evidence of being told to 'take a Grab'",
+    "Should have invoked service fee refund authority when operator refused compensation after customer provided substantial evidence",
+    "Failed to recognize this as a service failure requiring management escalation rather than endless back-and-forth with operator",
+    "Did not document or investigate the unanswered emergency hotline calls as a separate service failure"
+  ],
+  "agent_mistakes_observed": [
+    {
+      "mistake": "Sent generic macro responses ('I'll need some time to contact the operator...') repeatedly without acknowledging the customer's escalating frustration or addressing specific evidence provided",
+      "impact": "Customer had to restate their case multiple times and write increasingly detailed rebuttals"
+    },
+    {
+      "mistake": "Blindly relayed operator's denial without critically evaluating it against customer's evidence or investigating conflicting accounts",
+      "impact": "Customer felt dismissed and had to write a formal, structured rebuttal pointing out logical inconsistencies"
+    },
+    {
+      "mistake": "Failed to address the unanswered emergency phone calls issue, which is a separate service failure independent of the drop-off dispute",
+      "impact": "Customer had to emphasize this critical point in their final detailed response"
+    },
+    {
+      "mistake": "Internal Ops team initially suggested refunding from service fee, but CS team pushed back to operator, then Ops repeated operator's denial verbatim without investigation",
+      "impact": "Created internal confusion and prolonged resolution by over a month with no outcome"
+    },
+    {
+      "mistake": "After customer provided a detailed, evidence-based rebuttal, agent sent another generic 'I'll contact the operator' message instead of acknowledging the strength of the case or offering interim solution",
+      "impact": "Customer left without resolution after 1.5 months and multiple rounds of providing the same evidence"
+    }
+  ],
+  "red_flag_phrases": [
+    "I'll need some time to contact the operator to clarify this matter. As soon as I have an update, I'll get back to you immediately. (used 6+ times with no meaningful updates)",
+    "We are grateful for your understanding and apologize for the inconvenience. (used when customer clearly does NOT understand or accept the situation)",
+    "This was the customer's personal decision and not due to a refusal of service from our side. (operator's claim presented as fact without investigation)",
+    "We truly appreciate your patience and understanding (used while dismissing customer's evidence and denying compensation)",
+    "the additional transportation cost was incurred based on the customer's preference rather than an operational failure (verbatim operator claim repeated without 12Go investigation)",
+    "Thank you for your patience while we reviewed your case (when case was not genuinely reviewed, just operator's denial was accepted)"
+  ],
+  "ideal_response_qualities": [
+    "Acknowledges the severity of being stranded at wrong location and the distress caused",
+    "Specifically addresses the unanswered emergency phone numbers as a separate service failure requiring investigation",
+    "Evaluates operator's claims critically against customer's timestamped evidence (photos, call logs, Grab receipt)",
+    "Explains 12Go's role as platform vs. operator responsibility while taking ownership of overall customer experience",
+    "Offers interim update timeline and explains what investigation steps are being taken (not just 'contacting operator')",
+    "When operator denies, acknowledges the conflicting accounts and explains how 12Go will adjudicate",
+    "Recognizes when operator relationship should not override customer evidence and invokes service fee refund authority",
+    "Provides specific case reference number for management escalation if frontline cannot resolve",
+    "Apologizes for the extended resolution time and multiple requests for same evidence"
+  ],
+  "csat_drivers": {
+    "what_would_earn_5": "Proactively investigate conflicting accounts rather than defaulting to operator's version. Acknowledge that unanswered emergency numbers = service failure regardless of drop-off dispute. Offer service fee refund or partial compensation when operator refuses despite customer evidence. Provide clear timeline and follow through. Recognize this as service failure requiring management intervention, not endless operator negotiation.",
+    "what_would_earn_1": "Copy-paste operator denials without investigation. Ignore evidence customer provides. Send generic 'contacting operator' macros 6+ times over 1.5 months. Dismiss customer's detailed rebuttal with another delay message. Never address the emergency phone failure. Frame customer's decision to take Grab (after being told to by operator staff) as 'personal preference.' Leave case unresolved after customer invests significant effort documenting everything."
+  },
+  "max_turns": 7,
+  "max_internal_turns": 5,
+  "source_ticket_id": 748911,
+  "source_csat_score": "bad",
+  "booking_facts": {
+    "departure_date": "{{YESTERDAY}}",
+    "route": "Mui Ne → Nha Trang",
+    "operator_name": "Hanh Cafe X",
+    "booking_status": "confirmed",
+    "refund_policy": "Non-refundable per operator policy",
+    "customer_country": "Vietnam",
+    "additional_notes": "Customer dropped at 106 Phong Chau instead of Nha Trang. Took Grab out of pocket. Emergency hotline numbers unanswered. Customer has photo evidence and Grab receipt. Lunar New Year peak period."
+  },
+  "applicable_tou_clauses": [
+    4
+  ],
+  "customer_name": "David Nguyen",
+  "booking_id": "7489116",
+  "pickup_address": "Mui Ne Hills Budget Hotel, 88 Nguyen Dinh Chieu, Mui Ne",
+  "dropoff_address": "Sunrise Nha Trang Beach Hotel, 12 Tran Phu Boulevard, Nha Trang",
+  "confirmation_type": "instant",
+  "it_context": ""
+}
