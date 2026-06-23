@@ -2,17 +2,17 @@
   "case_title": "Case 1",
   "case_language": "English",
   "customer_profile": {
-    "situation": "Customer received a 'Something went wrong' error message after completing their first booking payment, leading them to believe the transaction failed. They rebooked the same trip and were then charged twice for what they intended as a single round-trip booking.",
+    "situation": "Customer received a 'Something went wrong' error message after completing their first booking payment, leading them to believe the transaction failed. They rebooked the same trip and were then charged twice for what they intended as a single booking. Both bookings were actually confirmed on the platform and both payments were charged to the customer's card.",
     "emotional_state": "angry",
     "personality_notes": "Writes short messages (1-3 sentences typical), gets more detailed only when feeling ignored. Uses caps for emphasis when frustrated, not in every message. Mentions legal action once if no progress after 2-3 exchanges, then references it sparingly. Sounds like a regular person texting—direct and increasingly impatient, not like a lawyer writing formal complaints."
   },
   "opening_message": "I'm really frustrated right now. I tried to book my trip and after I entered all my payment info, your site gave me an error saying something went wrong. I thought the payment didn't go through so I had to book the whole thing again. Now I'm seeing I was charged TWICE for the same booking even though the first payment supposedly failed. This is unacceptable, I only wanted to book ONE trip and now I'm charged for two. I need this fixed immediately.",
-  "context_for_agent": "Customer experienced a technical UX issue: website showed 'Something went wrong' error after payment, but booking was actually confirmed in background. Customer made second booking believing first failed. This is a platform error scenario where 12Go's error messaging caused the duplicate booking, not customer negligence. Agent needs to distinguish between customer-caused duplicates and platform-caused duplicates, and escalate technical failures for refund exception review.",
+  "context_for_agent": "Customer experienced a technical UX issue: website showed 'Something went wrong' error after first payment, but the booking was actually confirmed in background. Customer made a second booking believing the first failed — that second booking ALSO went through. Result: TWO confirmed bookings, BOTH non-refundable per operator policy, BOTH charged to customer's card. Without IT verification the agent cannot tell whether the error was a real platform-side failure or just a transient network glitch. The correct path is: (1) acknowledge & empathize with the UX confusion, (2) escalate internally to IT to verify the error event in payment gateway logs, (3) if IT confirms 12Go-side error, process a refund for the duplicate booking as an exception to the non-refundable policy. Without IT confirmation, refund cannot be issued because both bookings are technically valid under operator policy.",
   "internal_process_gaps": [
-    "Should have escalated to IT/technical team to verify the error message shown and whether it was a platform failure",
+    "Should have escalated to IT/technical team to verify the error message shown and whether it was a platform failure — without this verification, no refund can be issued",
     "Should have checked exact timestamps of both bookings to confirm they occurred within minutes due to error message (not separate intentional bookings)",
     "Should have requested screenshots of the error message to document the UX failure",
-    "Should have escalated to supervisor or refund exception team given platform error caused the duplicate",
+    "Should have processed refund only AFTER IT confirmed the error was on 12Go's side — and then processed it as an exception to the non-refundable policy",
     "Should have distinguished between 'customer didn't check account' vs 'platform showed explicit error telling customer to rebook'",
     "Should have checked if error message explicitly instructed customer to 'pay again' (platform liability)"
   ],
@@ -58,30 +58,32 @@
   "ideal_response_qualities": [
     "Immediately acknowledges the technical error experience and apologizes for the confusing messaging",
     "Requests specific evidence: screenshots of error message, exact wording, timestamps",
-    "Explains will escalate to technical team to investigate whether platform error occurred",
+    "Explains will escalate to IT/technical team to investigate whether platform error occurred — and that refund decision depends on their findings",
     "Differentiates between customer error and platform error scenarios",
-    "Avoids citing non-refundable policy until investigation is complete",
-    "Sets clear timeline for investigation (e.g., '24-48 hours for technical review')",
+    "Avoids citing non-refundable policy as a final answer — uses it only to explain why IT verification is required first",
+    "Sets clear timeline for IT investigation (e.g., '24-48 hours for technical review')",
     "Acknowledges customer's frustration is valid if error message was misleading",
-    "Offers proactive compensation consideration pending investigation outcome",
+    "Once IT confirms platform error, processes refund for one of the two bookings as a policy exception",
     "Never uses 'Thank you for your understanding' when customer is threatening legal action",
     "Escalates to supervisor when customer mentions government agency complaints"
   ],
   "csat_drivers": {
-    "what_would_earn_5": "Agent acknowledges platform error, immediately escalates for technical review and refund exception, provides clear timeline, follows up proactively with resolution (refund or substantial credit), apologizes for poor UX, and explains steps taken to prevent future occurrences. Customer feels heard and sees 12Go taking responsibility for their system's failure.",
-    "what_would_earn_1": "Agent robotically repeats non-refundable policy without investigating technical claim, copies same macro multiple times, blames customer for not checking account when error message told them to 'pay again', uses 'thank you for your understanding' when customer is threatening legal action, and closes ticket while customer is still escalating. Exactly what happened here."
+    "what_would_earn_5": "Agent acknowledges platform error, immediately escalates to IT for technical verification, provides clear timeline, follows up proactively with resolution (refund for one of the two bookings once IT confirms 12Go-side error), apologizes for poor UX, and explains steps taken to prevent future occurrences. Customer feels heard and sees 12Go taking responsibility for their system's failure.",
+    "what_would_earn_1": "Agent robotically repeats non-refundable policy without investigating technical claim, never escalates to IT, copies same macro multiple times, blames customer for not checking account when error message told them to 'pay again', uses 'thank you for your understanding' when customer is threatening legal action, and closes ticket while customer is still escalating. Exactly what happened here."
   },
   "max_turns": 5,
   "source_ticket_id": 973250,
   "source_csat_score": "bad",
   "booking_facts": {
     "departure_date": "{{TODAY_PLUS_DAYS_5}}",
-    "route": "Not specified",
-    "operator_name": "Bicol Isarog",
-    "booking_status": "confirmed",
-    "refund_policy": "Non-refundable per operator policy",
+    "duration_hours": 14,
+    "total_price": "PHP 1,028 (per booking — customer charged twice = PHP 2,056 total)",
+    "route": "Legazpi → Manila",
+    "operator_name": "Bicol Express",
+    "booking_status": "TWO confirmed bookings (duplicate); both charged to customer's card",
+    "refund_policy": "Non-refundable per operator policy (exception possible only if IT confirms platform-side error)",
     "customer_country": "Philippines",
-    "additional_notes": "Customer claims website showed 'Something went wrong' error after first payment, causing them to rebook. Both bookings confirmed and charged."
+    "additional_notes": "Customer claims website showed 'Something went wrong' error after first payment, causing them to rebook. Both bookings are confirmed and both payments were charged. Without IT verification of the error event, the agent cannot determine whether to process refund as an exception."
   },
   "applicable_tou_clauses": [
     9
@@ -91,5 +93,5 @@
   "pickup_address": "Legazpi City Grand Terminal",
   "dropoff_address": "Cubao Bus Terminal, Manila",
   "confirmation_type": "instant",
-  "it_context": "Payment gateway logs show transaction 1 completed successfully at 14:23:18 but error handler triggered incorrectly, displaying 'Something went wrong' message to user despite successful booking confirmation. Second transaction processed at 14:26:42, only 3 minutes later, indicating user immediate retry behavior consistent with error-driven rebooking."
+  "it_context": "Payment gateway logs show transaction 1 completed successfully at 14:23:18 but error handler triggered incorrectly, displaying 'Something went wrong' message to user despite successful booking confirmation. Second transaction processed at 14:26:42, only 3 minutes later, indicating user immediate retry behavior consistent with error-driven rebooking. IT confirms this was a 12Go-side error handler bug — both bookings are technically valid but the duplicate was caused by our platform misleading the user."
 }

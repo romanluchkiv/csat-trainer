@@ -2,12 +2,12 @@
   "case_title": "Case 2",
   "case_language": "Mixed (English and Spanish)",
   "customer_profile": {
-    "situation": "Customer was involved in a highway accident with Star Bus Egypt operator (Hurghada → Sharm El Sheikh). Driver was smoking and texting at 145 km/h with lights off; side-swiped another vehicle around 2am, resulting in ~7-hour delay roadside. Customer was terrified, arrived exhausted hours late. Grandfather's WWII-era Ruksac was damaged in the impact (torn strap, bent frame). Demands full refund + luggage compensation. This is a clear safety failure qualifying for full refund under safety policy.",
+    "situation": "Customer was involved in a highway accident with Coastal Bus Egypt operator (Hurghada → Sharm El Sheikh). Driver was smoking and texting at 145 km/h with lights off; side-swiped another vehicle around 2am, resulting in ~7-hour delay roadside. Customer was terrified, arrived exhausted hours late. Grandfather's WWII-era Ruksac was damaged in the impact (torn strap, bent frame). Demands full refund + luggage compensation. This is a clear safety failure qualifying for full refund under safety policy.",
     "emotional_state": "angry",
     "personality_notes": "Educated person who writes clearly but keeps messages short (1-3 sentences typical) when things are moving forward. Uses occasional caps or switches to Spanish only when feeling truly ignored or disrespected—not in every message. Mentions legal threats and public reviews once early on as leverage, then references them sparingly if situation drags without progress. Becomes increasingly blunt and profane only after months of feeling dismissed, not immediately."
   },
-  "opening_message": "Hello. I want to file a serious complaint about our trip from Hurghada to Sharm El Sheikh with Star Bus Egypt. We were involved in an accident on the highway — the driver had been smoking and texting on his phone the entire trip, driving at 145 km/h with headlights off on blind curves. He side-swiped another vehicle around 2am. Thankfully nobody was seriously injured, but we were stuck on the roadside for almost 7 hours waiting for a replacement bus. We arrived at our hotel completely exhausted and traumatized, hours after our scheduled arrival time. To make it worse, my grandfather's WWII-era Ruksac (1939) was damaged — torn strap and bent frame — from luggage being thrown around during the impact. We were terrified for our lives the entire trip even before the crash. We paid over 100€ for this service and this is the worst transport experience of our lives. I want a full refund immediately and compensation for the irreplaceable Ruksac. If this isn't resolved fairly I'm filing a dispute with our credit card company and posting detailed reviews everywhere.",
-  "context_for_agent": "Customer alleges serious safety violations on a Star Bus Egypt journey in December 2025. Internal confusion exists about which booking (Cairo-Sharm vs Hurghada-Sharm) is being disputed. This is a severe reputation risk case involving passenger safety, not just service quality. Agent must treat as priority escalation requiring immediate senior/ops intervention and interim goodwill gesture while investigation proceeds.",
+  "opening_message": "Hello. I want to file a serious complaint about our trip from Hurghada to Sharm El Sheikh with Coastal Bus Egypt. We were involved in an accident on the highway — the driver had been smoking and texting on his phone the entire trip, driving at 145 km/h with headlights off on blind curves. He side-swiped another vehicle around 2am. Thankfully nobody was seriously injured, but we were stuck on the roadside for almost 7 hours waiting for a replacement bus. We arrived at our hotel completely exhausted and traumatized, hours after our scheduled arrival time. To make it worse, my grandfather's WWII-era Ruksac (1939) was damaged — torn strap and bent frame — from luggage being thrown around during the impact. We were terrified for our lives the entire trip even before the crash. We paid over 100€ for this service and this is the worst transport experience of our lives. I want a full refund immediately and compensation for the irreplaceable Ruksac. If this isn't resolved fairly I'm filing a dispute with our credit card company and posting detailed reviews everywhere.",
+  "context_for_agent": "Customer alleges serious safety violations on a Coastal Bus Egypt journey in December 2025. Internal confusion exists about which booking (Cairo-Sharm vs Hurghada-Sharm) is being disputed. This is a severe reputation risk case involving passenger safety, not just service quality. Agent must treat as priority escalation requiring immediate senior/ops intervention and interim goodwill gesture while investigation proceeds.",
   "internal_process_gaps": [
     "Failed to escalate safety allegations (reckless driving, smoking driver, lights-off driving at 145km/h) to senior management or safety team immediately",
     "Did not offer interim goodwill gesture (partial refund, voucher, or gesture of acknowledgment) while investigation was ongoing over 5+ months",
@@ -79,8 +79,10 @@
   "source_csat_score": "unoffered",
   "booking_facts": {
     "departure_date": "{{TODAY_PLUS_DAYS_7}}",
+    "duration_hours": 6,
+    "total_price": "€100",
     "route": "Hurghada → Sharm El Sheikh",
-    "operator_name": "Star Bus Egypt",
+    "operator_name": "Coastal Bus Egypt",
     "booking_status": "confirmed",
     "refund_policy": "Non-refundable per operator policy",
     "customer_country": "Egypt",

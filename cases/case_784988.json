@@ -57,8 +57,10 @@
   "source_csat_score": "bad",
   "booking_facts": {
     "departure_date": "{{TOMORROW_PLUS_HOURS_18}}",
+    "duration_hours": 2.5,
+    "total_price": "1,200 THB",
     "route": "Hanoi → Da Nang",
-    "operator_name": "QH Discovery Travel",
+    "operator_name": "Reunification Lines",
     "booking_status": "pending",
     "refund_policy": "Non-refundable per operator policy",
     "customer_country": "Vietnam",

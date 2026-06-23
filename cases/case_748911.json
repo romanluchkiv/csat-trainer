@@ -67,8 +67,10 @@
   "source_csat_score": "bad",
   "booking_facts": {
     "departure_date": "{{YESTERDAY}}",
+    "duration_hours": 5,
+    "total_price": "1,500,000 VND",
     "route": "Mui Ne → Nha Trang",
-    "operator_name": "Hanh Cafe X",
+    "operator_name": "Vietnam Fairytale",
     "booking_status": "confirmed",
     "refund_policy": "Non-refundable per operator policy",
     "customer_country": "Vietnam",

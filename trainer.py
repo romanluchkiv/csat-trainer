@@ -111,6 +111,17 @@ def resolve_case_tokens(case_data):
     bf = case_data.get('booking_facts', {})
     if 'departure_date' in bf:
         bf['departure_date'] = resolve_date_tokens(bf['departure_date'])
+    # Compute arrival_date from departure + duration_hours, if both present
+    if 'departure_date' in bf and 'duration_hours' in bf:
+        try:
+            dep_dt = dt.datetime.strptime(bf['departure_date'], '%d-%b-%Y %H:%M')
+            duration = float(bf['duration_hours'])
+            arr_dt = dep_dt + dt.timedelta(hours=duration)
+            bf['arrival_date'] = arr_dt.strftime('%d-%b-%y %H:%M')
+            # Reformat departure to 2-digit year too, to match Zendesk style
+            bf['departure_date'] = dep_dt.strftime('%d-%b-%y %H:%M')
+        except (ValueError, TypeError):
+            pass
     return case_data
 
 
@@ -638,7 +649,13 @@ with col_info:
     bf = case.get('booking_facts', {})
     st.markdown(f"**Booking ID:** {case.get('booking_id', 'N/A')}")
     st.markdown(f"**Route:** {bf.get('route', 'N/A')}")
-    st.markdown(f"**Departure:** {bf.get('departure_date', 'N/A')}")
+    if bf.get('arrival_date'):
+        st.markdown(f"**Departure:** {bf.get('departure_date', 'N/A')}")
+        st.markdown(f"**Arrival:** {bf.get('arrival_date')}")
+    else:
+        st.markdown(f"**Departure:** {bf.get('departure_date', 'N/A')}")
+    if bf.get('total_price'):
+        st.markdown(f"**Total price:** {bf.get('total_price')}")
     st.markdown(f"**Operator:** {bf.get('operator_name', 'N/A')}")
     st.markdown(f"**Confirmation:** {case.get('confirmation_type', 'instant')}")
     st.markdown(f"**Status:** {bf.get('booking_status', 'N/A')}")
@@ -758,13 +775,20 @@ with col_main:
     bf = case.get('booking_facts', {})
     is_urgent_24h = False
     dep_str = bf.get('departure_date', '')
-    try:
-        dep_dt = dt.datetime.strptime(dep_str, '%d-%b-%Y %H:%M')
-        delta_hours = (dep_dt - dt.datetime.now()).total_seconds() / 3600
-        if 0 <= delta_hours <= 24:
-            is_urgent_24h = True
-    except Exception:
-        pass
+    dep_dt = None
+    for fmt_str in ('%d-%b-%Y %H:%M', '%d-%b-%y %H:%M'):
+        try:
+            dep_dt = dt.datetime.strptime(dep_str, fmt_str)
+            break
+        except (ValueError, TypeError):
+            continue
+    if dep_dt is not None:
+        try:
+            delta_hours = (dep_dt - dt.datetime.now()).total_seconds() / 3600
+            if 0 <= delta_hours <= 24:
+                is_urgent_24h = True
+        except Exception:
+            pass
 
     if is_urgent_24h:
         wait_label = '⏳ Skip ahead — request Ops update now (urgent <24h)'
@@ -785,9 +809,22 @@ with col_main:
                 st.session_state.conversation.append({'role': 'ops', 'content': ops_reply})
             st.rerun()
 
-    agent_reply = st.chat_input(
-        'Public reply...' if mode == 'public' else 'Internal note (start with "Dear IT" or "Dear Ops")...'
+    placeholder_text = (
+        'Public reply... (Enter = new line, click Send to submit)'
+        if mode == 'public'
+        else 'Internal note (start with "Dear IT" or "Dear Ops")... (Enter = new line, click Send to submit)'
     )
+    # Use a key that changes after each send so the box clears
+    input_key = f'agent_input_{st.session_state.turn_count}_{st.session_state.internal_turn_count}_{mode}'
+    agent_reply_text = st.text_area(
+        'Your reply',
+        key=input_key,
+        placeholder=placeholder_text,
+        height=140,
+        label_visibility='collapsed',
+    )
+    send_clicked = st.button('Send ▶', type='primary', key=f'send_{input_key}')
+    agent_reply = agent_reply_text.strip() if (send_clicked and agent_reply_text and agent_reply_text.strip()) else None
 
     if agent_reply:
         client = get_client()
