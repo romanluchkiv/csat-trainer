@@ -107,6 +107,20 @@ def resolve_date_tokens(value):
     return re.sub(r'\{\{([A-Z0-9_]+)\}\}', replace_token, value)
 
 
+def format_ts(iso_or_dt):
+    """Format an ISO string or datetime as Zendesk-style '30-Jun-26 14:23'."""
+    if iso_or_dt is None:
+        return ''
+    try:
+        if isinstance(iso_or_dt, str):
+            obj = dt.datetime.fromisoformat(iso_or_dt.replace('Z', '+00:00'))
+        else:
+            obj = iso_or_dt
+        return obj.strftime('%d-%b-%y %H:%M')
+    except Exception:
+        return ''
+
+
 def resolve_case_tokens(case_data):
     bf = case_data.get('booking_facts', {})
     if 'departure_date' in bf:
@@ -203,15 +217,29 @@ def init_case_state(case_data):
     """Reset per-case state and seed with opening message."""
     customer_name = case_data.get('customer_name', 'Customer')
     st.session_state.current_case = case_data
-    st.session_state.session_started_at = dt.datetime.now(dt.timezone.utc).isoformat()
+    started_at = dt.datetime.now(dt.timezone.utc)
+    st.session_state.session_started_at = started_at.isoformat()
+    # Each turn now carries a 'timestamp' so we can show Zendesk-style time markers.
     st.session_state.conversation = [
-        {'role': 'customer', 'content': case_data['opening_message'], 'name': customer_name}
+        {
+            'role': 'customer',
+            'content': case_data['opening_message'],
+            'name': customer_name,
+            'timestamp': started_at.isoformat(),
+        }
     ]
     st.session_state.turn_count = 0
     st.session_state.internal_turn_count = 0
     st.session_state.case_complete = False
     st.session_state.feedback_log = []
     st.session_state.reply_mode = 'public'
+    # v9.6: action buttons
+    st.session_state.refund_processed = False
+    st.session_state.reassigned = False
+    # 'agent_clock' tracks the in-simulation timestamp of the agent's last reply.
+    # We advance it by a small random offset between turns so timestamps move forward
+    # realistically without needing real wall-clock time.
+    st.session_state.agent_clock = started_at + dt.timedelta(minutes=2)
 
 
 def advance_to_next_case(verdict):
@@ -224,7 +252,8 @@ def advance_to_next_case(verdict):
         st.session_state.phase = 'between_cases'
     # Clear per-case state
     for k in ('current_case', 'conversation', 'turn_count', 'internal_turn_count',
-              'case_complete', 'feedback_log', 'reply_mode', 'session_started_at'):
+              'case_complete', 'feedback_log', 'reply_mode', 'session_started_at',
+              'refund_processed', 'reassigned', 'agent_clock'):
         if k in st.session_state:
             del st.session_state[k]
 
@@ -333,6 +362,14 @@ def get_final_verdict_structured(client, case_data, conversation):
             transcript_parts.append(f"[OPS TEAM REPLY]: {turn['content']}")
         elif role == 'it':
             transcript_parts.append(f"[IT TEAM REPLY]: {turn['content']}")
+        elif role == 'system_action':
+            action = turn.get('action', 'action')
+            if action == 'refund':
+                transcript_parts.append(f"[REFUND PROCESSED — action button click — {turn['content']}]")
+            elif action == 'reassign':
+                transcript_parts.append(f"[CASE REASSIGNED — action button click — {turn['content']}]")
+            else:
+                transcript_parts.append(f"[SYSTEM ACTION — {turn['content']}]")
     transcript = '\n\n'.join(transcript_parts)
 
     tou_clauses = case_data.get('applicable_tou_clauses', [])
@@ -359,13 +396,16 @@ def get_final_verdict_structured(client, case_data, conversation):
         tou_descriptions=tou_descriptions,
         red_flag_phrases='\n'.join(f'- {p}' for p in case_data.get('red_flag_phrases', [])) or '(none)',
         internal_process_gaps='\n'.join(f'- {p}' for p in case_data.get('internal_process_gaps', [])) or '(none)',
+        reassign_expected=str(case_data.get('reassign_expected', False)),
+        reassign_rationale=case_data.get('reassign_rationale', '(no rationale recorded)'),
     )
 
-    user_msg = f"FULL CONVERSATION TRANSCRIPT:\n\n{transcript}\n\nUse the submit_csat_verdict tool to record your verdict."
+    # Also add max_tokens bump for v9.6 — the new fields make verdict longer
+    user_msg = f"FULL CONVERSATION TRANSCRIPT:\n\n{transcript}\n\nUse the submit_csat_verdict tool to record your verdict.\n\nIMPORTANT: This case has reassign_expected={case_data.get('reassign_expected', False)}. Rationale: {case_data.get('reassign_rationale', '')}"
 
     response = client.messages.create(
         model=CLAUDE_MODEL,
-        max_tokens=2500,
+        max_tokens=3500,
         system=system,
         messages=[{'role': 'user', 'content': user_msg}],
         tools=[JUDGE_TOOL_SCHEMA],
@@ -382,7 +422,7 @@ def get_final_verdict_structured(client, case_data, conversation):
         'verdict_for_agent': 'Tool call did not return structured output.',
         'key_strengths': [],
         'key_gaps': ['Session verdict could not be generated due to a technical issue.'],
-        'emotional_acknowledgment': {'passed': False, 'explanation': 'Unable to evaluate.'},
+        'emotional_acknowledgment': {'passed': False, 'explanation': 'Unable to evaluate.', 'suggested_acknowledgment': ''},
         'tou_clauses_referenced': [],
         'phrase_repetition_flagged': False,
         'red_flag_phrases_used': [],
@@ -391,6 +431,13 @@ def get_final_verdict_structured(client, case_data, conversation):
         'promises_kept': [],
         'promises_broken': [],
         'per_turn_review': [],
+        'agent_actions': {
+            'refund_pressed': False,
+            'refund_timing': 'not_applicable',
+            'refund_evaluation': '',
+            'reassigned': False,
+            'reassign_evaluation': '',
+        },
     }
 
 
@@ -484,6 +531,16 @@ if not ANTHROPIC_API_KEY:
 
 init_phase()
 phase = st.session_state.phase
+
+# v9.6 — Session persistence warning. Shown only inside an active case so it doesn't
+# clutter the auth/rules/complete screens. We DON'T have server-side state persistence
+# yet (planned for v9.7 with Google Sheets), so a refresh/idle/lunch-out will lose progress.
+if phase == 'in_case':
+    st.warning(
+        '⚠️ **Don\'t refresh, close the tab, or step away for more than ~10 minutes.** '
+        'Your case progress is held in your browser session only — if it drops, you\'ll have to restart this case from the beginning.',
+        icon='⚠️',
+    )
 
 
 # ----- PHASE: auth -----
@@ -604,15 +661,55 @@ if phase == 'complete':
                 st.success(f"✅ **Emotional acknowledgment — strong.** {ea_explanation}")
             else:
                 st.error(f"❌ **Emotional acknowledgment — missing.** {ea_explanation}")
+                # v9.6 — show concrete example so feedback is actionable
+                ea_obj = v.get('emotional_acknowledgment', {})
+                if isinstance(ea_obj, dict):
+                    suggested = ea_obj.get('suggested_acknowledgment', '')
+                    if suggested:
+                        st.info(f"💡 **Example fix:** _{suggested}_")
+
+            # v9.6 — Action button outcomes
+            actions = v.get('agent_actions', {})
+            if isinstance(actions, dict) and (actions.get('refund_pressed') or actions.get('reassigned')):
+                st.markdown('**🎛 Action buttons used**')
+                if actions.get('refund_pressed'):
+                    timing = actions.get('refund_timing', 'not_applicable')
+                    timing_icon = '✅' if timing == 'correct' else '⚠️'
+                    timing_label = {
+                        'correct': 'Correct timing & amount',
+                        'premature': 'Premature (verification missing)',
+                        'late': 'Late',
+                        'wrong_amount': 'Wrong amount (e.g. full when partial was due)',
+                        'not_applicable': '',
+                    }.get(timing, timing)
+                    eval_text = actions.get('refund_evaluation', '')
+                    st.markdown(f"{timing_icon} **Refund pressed** — {timing_label}. {eval_text}")
+                if actions.get('reassigned'):
+                    eval_text = actions.get('reassign_evaluation', '')
+                    st.markdown(f"🔼 **Reassigned to CS Managers.** {eval_text}")
+
+            def _ensure_list(value, default):
+                """Defensive helper: if LLM returned a string instead of a list,
+                wrap it. Prevents the 'letter-per-row' rendering bug."""
+                if value is None:
+                    return default
+                if isinstance(value, str):
+                    return [value] if value.strip() else default
+                if isinstance(value, list):
+                    return value if value else default
+                return default
+
+            strengths = _ensure_list(v.get('key_strengths'), ['(none noted)'])
+            gaps = _ensure_list(v.get('key_gaps'), ['(none)'])
 
             sg_col1, sg_col2 = st.columns(2)
             with sg_col1:
                 st.markdown('**✅ Strengths**')
-                for s in v.get('key_strengths', []) or ['(none noted)']:
+                for s in strengths:
                     st.markdown(f'- {s}')
             with sg_col2:
                 st.markdown('**🔧 Gaps to work on**')
-                for g in v.get('key_gaps', []) or ['(none)']:
+                for g in gaps:
                     st.markdown(f'- {g}')
 
     st.divider()
@@ -641,21 +738,32 @@ with st.sidebar:
     st.caption('Your results will be shown after the final case.')
 
 # Two-column layout
-col_main, col_info = st.columns([3, 1])
+col_main, col_info = st.columns([2.4, 1])
 
 # Booking info
 with col_info:
     st.markdown('#### Booking information')
     bf = case.get('booking_facts', {})
     st.markdown(f"**Booking ID:** {case.get('booking_id', 'N/A')}")
+    if case.get('secondary_booking_id'):
+        st.markdown(f"**Secondary booking ID:** {case.get('secondary_booking_id')} _(duplicate)_")
     st.markdown(f"**Route:** {bf.get('route', 'N/A')}")
     if bf.get('arrival_date'):
         st.markdown(f"**Departure:** {bf.get('departure_date', 'N/A')}")
         st.markdown(f"**Arrival:** {bf.get('arrival_date')}")
     else:
         st.markdown(f"**Departure:** {bf.get('departure_date', 'N/A')}")
-    if bf.get('total_price'):
-        st.markdown(f"**Total price:** {bf.get('total_price')}")
+    # Price line: "1 passenger × €100 (net €85 + sysfee €15)"
+    passengers = bf.get('passenger_count', 1)
+    total_price = bf.get('total_price')
+    net_price = bf.get('net_price')
+    system_fee = bf.get('system_fee')
+    if total_price:
+        passenger_word = 'passenger' if passengers == 1 else 'passengers'
+        if net_price and system_fee:
+            st.markdown(f"**Price:** {passengers} {passenger_word} × {total_price} (net {net_price} + sysfee {system_fee})")
+        else:
+            st.markdown(f"**Price:** {passengers} {passenger_word} × {total_price}")
     st.markdown(f"**Operator:** {bf.get('operator_name', 'N/A')}")
     st.markdown(f"**Confirmation:** {case.get('confirmation_type', 'instant')}")
     st.markdown(f"**Status:** {bf.get('booking_status', 'N/A')}")
@@ -664,6 +772,132 @@ with col_info:
     st.markdown(f"**Refund policy:** {bf.get('refund_policy', 'N/A')}")
     if bf.get('customer_country'):
         st.markdown(f"**Customer country:** {bf['customer_country']}")
+    # Payment log (Case 4 — duplicate-payment diagnostic info)
+    pay_log = case.get('payment_log') or []
+    if pay_log:
+        st.markdown('---')
+        st.markdown('**🧾 Payment log**')
+        for entry in pay_log:
+            st.markdown(
+                f"`{entry.get('booking_id','?')}` — {entry.get('amount','?')} — "
+                f"{entry.get('status','?')}<br>"
+                f"&nbsp;&nbsp;paid at {entry.get('paid_at','?')}, ticket sent at {entry.get('ticket_sent_at','?')}<br>"
+                f"&nbsp;&nbsp;<em>{entry.get('note','')}</em>",
+                unsafe_allow_html=True,
+            )
+
+    # ----- v9.6 ACTIONS panel (right column, below Booking Info) -----
+    # Shown only inside an active case (not on between-cases / complete screens)
+    if st.session_state.get('phase') == 'in_case' or 'current_case' in st.session_state:
+        st.markdown('---')
+        st.markdown('#### 🎛 Actions')
+
+        bf = case.get('booking_facts', {})
+        total_price_default = bf.get('total_price', '')
+        booking_id_str = case.get('booking_id', 'this booking')
+
+        # Refund amount input — agent can edit, defaults to total price
+        refund_amount = st.text_input(
+            'Refund amount',
+            value=total_price_default,
+            disabled=st.session_state.refund_processed,
+            help='Edit the amount before clicking Process refund. Default is the full booking price. The Judge evaluates whether the amount is correct for the applicable ToU clause (e.g. clause 4 = Grab fee only, not full booking).',
+            key=f'refund_amount_input_{case_idx}',
+        )
+
+        if st.button(
+            '💳 Process refund',
+            disabled=st.session_state.refund_processed,
+            help='Mark this booking as refunded for the amount above. The Judge will evaluate whether the timing and amount were correct for the applicable ToU clause.',
+            use_container_width=True,
+            key=f'refund_btn_{case_idx}',
+        ):
+            st.session_state.show_refund_confirm = True
+            # Mutual-exclusion: dismiss the OTHER confirm if it was open
+            if 'show_reassign_confirm' in st.session_state:
+                del st.session_state['show_reassign_confirm']
+            st.session_state.pending_refund_amount = refund_amount.strip() or total_price_default
+            st.rerun()
+
+        if st.button(
+            '🔼 Reassign to CS Managers',
+            disabled=st.session_state.reassigned,
+            help='Hand this case off to the CS Managers team. The case ends immediately and the Judge will evaluate whether reassigning was appropriate for this scenario.',
+            use_container_width=True,
+            key=f'reassign_btn_{case_idx}',
+        ):
+            st.session_state.show_reassign_confirm = True
+            # Mutual-exclusion: dismiss the OTHER confirm
+            if 'show_refund_confirm' in st.session_state:
+                del st.session_state['show_refund_confirm']
+            st.rerun()
+
+        # Refund confirmation (inline, right column)
+        if st.session_state.get('show_refund_confirm') and not st.session_state.refund_processed:
+            amt = st.session_state.get('pending_refund_amount', total_price_default)
+            st.warning(
+                f"**Confirm:** Process refund of **{amt}** for booking **{booking_id_str}**?"
+            )
+            st.caption('This action will be recorded in the transcript and evaluated by the Judge.')
+            cy, cn = st.columns(2)
+            with cy:
+                if st.button('✅ Yes', key='refund_yes', type='primary', use_container_width=True):
+                    st.session_state.agent_clock += dt.timedelta(minutes=2)
+                    refund_ts = st.session_state.agent_clock.isoformat()
+                    st.session_state.conversation.append({
+                        'role': 'system_action',
+                        'action': 'refund',
+                        'content': f"REFUND PROCESSED — booking {booking_id_str}, amount {amt}",
+                        'timestamp': refund_ts,
+                    })
+                    st.session_state.refund_processed = True
+                    if 'show_refund_confirm' in st.session_state:
+                        del st.session_state['show_refund_confirm']
+                    if 'pending_refund_amount' in st.session_state:
+                        del st.session_state['pending_refund_amount']
+                    st.rerun()
+            with cn:
+                if st.button('❌ Cancel', key='refund_no', use_container_width=True):
+                    del st.session_state['show_refund_confirm']
+                    if 'pending_refund_amount' in st.session_state:
+                        del st.session_state['pending_refund_amount']
+                    st.rerun()
+
+        # Reassign confirmation (inline, right column)
+        if st.session_state.get('show_reassign_confirm') and not st.session_state.reassigned:
+            st.warning('**Confirm:** Reassign to **CS Managers** team?')
+            st.caption('This ends the case immediately. The Judge will evaluate whether reassigning was the right call.')
+            cy, cn = st.columns(2)
+            with cy:
+                if st.button('✅ Yes', key='reassign_yes', type='primary', use_container_width=True):
+                    st.session_state.agent_clock += dt.timedelta(minutes=2)
+                    reassign_ts = st.session_state.agent_clock.isoformat()
+                    st.session_state.conversation.append({
+                        'role': 'system_action',
+                        'action': 'reassign',
+                        'content': 'CASE REASSIGNED to CS Managers',
+                        'timestamp': reassign_ts,
+                    })
+                    st.session_state.reassigned = True
+                    client = get_client()
+                    with st.spinner('Wrapping up case — getting verdict...'):
+                        verdict = get_final_verdict_structured(client, case, st.session_state.conversation)
+                    st.session_state.pending_verdict = verdict
+                    st.session_state.case_complete = True
+                    log_session(
+                        case, st.session_state.agent_email, st.session_state.agent_name,
+                        st.session_state.conversation, verdict,
+                        st.session_state.feedback_log,
+                        st.session_state.session_started_at,
+                        case_idx,
+                    )
+                    if 'show_reassign_confirm' in st.session_state:
+                        del st.session_state['show_reassign_confirm']
+                    st.rerun()
+            with cn:
+                if st.button('❌ Cancel', key='reassign_no', use_container_width=True):
+                    del st.session_state['show_reassign_confirm']
+                    st.rerun()
 
 # Main: conversation + reply
 with col_main:
@@ -671,9 +905,13 @@ with col_main:
 
     for turn in st.session_state.conversation:
         role = turn['role']
+        ts_str = format_ts(turn.get('timestamp'))
         if role == 'customer':
             with st.chat_message('user', avatar='👤'):
-                st.markdown(f"**{customer_name}**")
+                header = f"**{customer_name}**"
+                if ts_str:
+                    header += f" &nbsp;<span style='color:#888;font-size:0.85em;'>· {ts_str}</span>"
+                st.markdown(header, unsafe_allow_html=True)
                 content = turn['content']
                 attachment_marker = '[Attachments:'
                 if attachment_marker in content:
@@ -690,32 +928,51 @@ with col_main:
                     st.markdown(content)
         elif role == 'agent_public':
             with st.chat_message('assistant', avatar='🧑\u200d💼'):
+                if ts_str:
+                    st.markdown(
+                        f"<span style='color:#888;font-size:0.85em;'>{ts_str}</span>",
+                        unsafe_allow_html=True,
+                    )
                 st.markdown(turn['content'])
         elif role == 'agent_internal':
             addressee = turn.get('addressee', 'ops').upper()
+            ts_html = f"<span style='color:#666;font-size:0.85em;float:right;'>{ts_str}</span>" if ts_str else ''
             st.markdown(
                 f'<div style="background-color:#FFF8DC;color:#1a1a1a;border-left:4px solid #DAA520;'
                 f'padding:10px 14px;border-radius:4px;margin:8px 0;">'
-                f'<strong>📝 Internal note to {addressee} team</strong><br><br>'
+                f'<strong>📝 Internal note to {addressee} team</strong>{ts_html}<br><br>'
                 f'{turn["content"]}'
                 f'</div>',
                 unsafe_allow_html=True,
             )
         elif role == 'ops':
+            ts_html = f"<span style='color:#666;font-size:0.85em;float:right;'>{ts_str}</span>" if ts_str else ''
             st.markdown(
                 f'<div style="background-color:#FFF8DC;color:#1a1a1a;border-left:4px solid #B8860B;'
                 f'padding:10px 14px;border-radius:4px;margin:8px 0;">'
-                f'<strong>📋 Ops team reply — internal</strong><br><br>'
+                f'<strong>📋 Ops team reply — internal</strong>{ts_html}<br><br>'
                 f'{turn["content"]}'
                 f'</div>',
                 unsafe_allow_html=True,
             )
         elif role == 'it':
+            ts_html = f"<span style='color:#666;font-size:0.85em;float:right;'>{ts_str}</span>" if ts_str else ''
             st.markdown(
                 f'<div style="background-color:#FFF8DC;color:#1a1a1a;border-left:4px solid #4682B4;'
                 f'padding:10px 14px;border-radius:4px;margin:8px 0;">'
-                f'<strong>🛠️ IT team reply — internal</strong><br><br>'
+                f'<strong>🛠️ IT team reply — internal</strong>{ts_html}<br><br>'
                 f'{turn["content"]}'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
+        elif role == 'system_action':
+            action = turn.get('action', 'action')
+            icon = '💳' if action == 'refund' else '🔼'
+            ts_html = f" <span style='color:#666;font-size:0.85em;'>· {ts_str}</span>" if ts_str else ''
+            st.markdown(
+                f'<div style="background-color:#E8F5E9;color:#1B5E20;border:1px solid #66BB6A;'
+                f'padding:8px 14px;border-radius:4px;margin:8px 0;font-size:0.92em;">'
+                f'<strong>{icon} {turn["content"]}</strong>{ts_html}'
                 f'</div>',
                 unsafe_allow_html=True,
             )
@@ -799,14 +1056,29 @@ with col_main:
 
     if can_wait and mode == 'internal':
         if st.button(wait_label, help='Skip ahead in simulated time. Counts as 1 internal turn.'):
-            st.session_state.conversation.append({'role': 'agent_internal', 'content': wait_placeholder, 'addressee': 'ops'})
+            # Advance agent clock by simulated wait time
+            wait_delta = dt.timedelta(hours=12) if is_urgent_24h else dt.timedelta(days=5)
+            st.session_state.agent_clock += wait_delta
+            wait_ts = st.session_state.agent_clock.isoformat()
+            st.session_state.conversation.append({
+                'role': 'agent_internal',
+                'content': wait_placeholder,
+                'addressee': 'ops',
+                'timestamp': wait_ts,
+            })
             st.session_state.internal_turn_count += 1
             client = get_client()
             history = [t for t in st.session_state.conversation if t['role'] in ('agent_internal', 'ops', 'it')]
             with st.spinner('Ops responding after wait...'):
                 followup_msg = 'Following up — what is the status? (Urgent, <24h to departure)' if is_urgent_24h else 'Following up — what is the status?'
                 ops_reply = get_ops_reply(client, case, followup_msg, history)
-                st.session_state.conversation.append({'role': 'ops', 'content': ops_reply})
+                # Ops responds ~30 min later
+                st.session_state.agent_clock += dt.timedelta(minutes=30)
+                st.session_state.conversation.append({
+                    'role': 'ops',
+                    'content': ops_reply,
+                    'timestamp': st.session_state.agent_clock.isoformat(),
+                })
             st.rerun()
 
     placeholder_text = (
@@ -831,10 +1103,14 @@ with col_main:
 
         if mode == 'internal':
             addressee = detect_internal_note_addressee(agent_reply)
+            # Advance agent clock by ~3 minutes for the agent action
+            st.session_state.agent_clock += dt.timedelta(minutes=3)
+            agent_ts = st.session_state.agent_clock.isoformat()
             st.session_state.conversation.append({
                 'role': 'agent_internal',
                 'content': agent_reply,
                 'addressee': addressee,
+                'timestamp': agent_ts,
             })
             st.session_state.internal_turn_count += 1
 
@@ -842,10 +1118,22 @@ with col_main:
             with st.spinner(f'{addressee.upper()} team responding...'):
                 if addressee == 'it':
                     reply = get_it_reply(client, case, agent_reply, history[:-1])
-                    st.session_state.conversation.append({'role': 'it', 'content': reply})
+                    # IT replies ~20 min later
+                    st.session_state.agent_clock += dt.timedelta(minutes=20)
+                    st.session_state.conversation.append({
+                        'role': 'it',
+                        'content': reply,
+                        'timestamp': st.session_state.agent_clock.isoformat(),
+                    })
                 else:
                     reply = get_ops_reply(client, case, agent_reply, history[:-1])
-                    st.session_state.conversation.append({'role': 'ops', 'content': reply})
+                    # Ops typically slower — ~45 min
+                    st.session_state.agent_clock += dt.timedelta(minutes=45)
+                    st.session_state.conversation.append({
+                        'role': 'ops',
+                        'content': reply,
+                        'timestamp': st.session_state.agent_clock.isoformat(),
+                    })
 
             if st.session_state.internal_turn_count >= max_internal_turns:
                 st.warning(f'Internal note limit reached ({max_internal_turns}). Continue with public replies.')
@@ -853,7 +1141,14 @@ with col_main:
             st.rerun()
 
         else:  # public
-            st.session_state.conversation.append({'role': 'agent_public', 'content': agent_reply})
+            # Advance agent clock for the public reply
+            st.session_state.agent_clock += dt.timedelta(minutes=3)
+            agent_ts = st.session_state.agent_clock.isoformat()
+            st.session_state.conversation.append({
+                'role': 'agent_public',
+                'content': agent_reply,
+                'timestamp': agent_ts,
+            })
             st.session_state.turn_count += 1
 
             # Hit turn cap?
@@ -874,10 +1169,19 @@ with col_main:
             with st.spinner('Customer is typing...'):
                 customer_reply = get_customer_reply(client, case, st.session_state.conversation)
 
+            # Customer replies ~5-15 min later
+            st.session_state.agent_clock += dt.timedelta(minutes=10)
+            customer_ts = st.session_state.agent_clock.isoformat()
+
             if '[END_CONVERSATION]' in customer_reply:
                 customer_reply = customer_reply.replace('[END_CONVERSATION]', '').strip()
                 if customer_reply:
-                    st.session_state.conversation.append({'role': 'customer', 'content': customer_reply, 'name': customer_name})
+                    st.session_state.conversation.append({
+                        'role': 'customer',
+                        'content': customer_reply,
+                        'name': customer_name,
+                        'timestamp': customer_ts,
+                    })
                 with st.spinner('Customer ended the conversation. Wrapping up case…'):
                     verdict = get_final_verdict_structured(client, case, st.session_state.conversation)
                     st.session_state.pending_verdict = verdict
@@ -890,6 +1194,11 @@ with col_main:
                         case_idx,
                     )
             else:
-                st.session_state.conversation.append({'role': 'customer', 'content': customer_reply, 'name': customer_name})
+                st.session_state.conversation.append({
+                    'role': 'customer',
+                    'content': customer_reply,
+                    'name': customer_name,
+                    'timestamp': customer_ts,
+                })
 
             st.rerun()
