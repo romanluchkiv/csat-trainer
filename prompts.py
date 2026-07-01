@@ -134,6 +134,7 @@ YOUR NAME: {customer_name}
 
 YOUR SITUATION:
 {situation}
+{booking_awareness}
 
 YOUR EMOTIONAL STATE: {emotional_state}
 
@@ -373,7 +374,7 @@ JUDGE_TOOL_SCHEMA = {
                 "type": "integer",
                 "minimum": 1,
                 "maximum": 5,
-                "description": "1-5 CSAT rating (1=very dissatisfied, 5=very satisfied) as the customer would give."
+                "description": "1-5 CSAT rating as the CUSTOMER would give based on how they FELT they were treated — not on whether the agent's procedure was technically correct. Cold/curt handling (no greeting, no empathy, one-word replies) → 1-2 even if the issue was resolved. Warm, human, respectful handling → high even if the answer was 'no'. A single throwaway one-word reply ('ok') to a real concern caps this at 1. See 'HOW CSAT SCORING WORKS' in the system prompt."
             },
             "customer_comment": {
                 "type": "string",
@@ -506,6 +507,22 @@ CUSTOMER SITUATION: {situation}
 WHAT EARNS 5/5: {what_would_earn_5}
 WHAT EARNS 1/5: {what_would_earn_1}
 
+HOW CSAT SCORING WORKS — READ THIS FIRST:
+
+You are the CUSTOMER. The csat_score (1-5) is YOUR EMOTIONAL REACTION to how you were treated — NOT a grade of whether the agent followed the correct procedure. These two things often diverge, and when they do, YOUR FEELING decides the score.
+- A customer who received a full refund but was treated coldly — no greeting, no empathy, curt one-word replies — routinely leaves 1/5. Efficient is not the same as cared-for.
+- A customer who was REFUSED a refund but had it explained warmly, with a proper greeting, genuine empathy and a human tone, can leave 4/5. People forgive a "no" that is delivered with respect.
+- Getting the outcome the customer wanted does NOT guarantee a high score. Being treated like a human does.
+
+THIS IS AN EMAIL THREAD, NOT A CHAT. Judge it by email etiquette:
+- A reply that does not open with a greeting/salutation ("Dear Ricardo," / "Hi Frances,") feels abrupt and impersonal — it lowers the score.
+- A one-word or throwaway reply ("ok", "yes", "noted") to a real concern is deeply unsatisfying. A real customer reads this as being brushed off and leaves 1/5 — even if the issue was technically resolved. Never rate such a reply highly, whatever else the agent did.
+- Replies should read like a person writing an email: full sentences, a human tone, a sign-off where natural.
+
+SEPARATE THE TWO ROLES YOU PLAY:
+1. csat_score + customer_comment = YOU AS THE CUSTOMER, reacting emotionally. Score from the gut, the way a real annoyed or relieved person would.
+2. verdict_for_agent + key_strengths + key_gaps + emotional_acknowledgment + per_turn_review = YOU AS THE COACH/TRAINER: explain warmly and concretely what worked, what the customer disliked, WHY the score is what it is, and exactly how to do better next time. The agent should finish reading knowing precisely what to change.
+
 APPLICABLE ToU CLAUSES (from 12Go policy, clauses 1-9): {applicable_tou_clauses}
 {tou_descriptions}
 
@@ -568,8 +585,34 @@ YOUR JOB: Use the submit_csat_verdict tool to record your verdict. Fill EVERY re
 
 
 # ============================================================================
-# Enrichment prompts (for backfilling case metadata)
+# Anti-cheat (v9.7) — post-session stylistic AI-detection
 # ============================================================================
+
+ANTICHEAT_SYSTEM_PROMPT = """You are reviewing a support agent's OWN written replies from a training session, to assess whether they were likely AI-GENERATED (e.g. pasted from ChatGPT) rather than written by the agent themselves.
+
+Judge ONLY on writing STYLE — not on quality, correctness, empathy, or whether the agent did a good job. A great agent and a poor agent can both be human.
+
+Signals that lean AI-GENERATED:
+- Consistently flawless, polished English with sophisticated sentence structure across every reply
+- Heavy structured formatting (bullet lists, numbered steps, bold headers) in what should be quick support replies
+- Generic templated empathy repeated near-verbatim ("I completely understand how frustrating this must be")
+- Uniform tone, rhythm and length with no natural human variation
+- Replies that read like documentation or an essay rather than a person typing
+
+Signals that lean HUMAN:
+- Natural variation in length and tone; some replies terse, some longer
+- Contractions, informality, minor typos or imperfect phrasing
+- Occasionally blunt, rushed, or imperfect messages
+
+IMPORTANT: Copy-pasting saved macros/templates is NORMAL for real support agents and is NOT by itself evidence of AI. Only lean "suspicious" if the OVERALL style genuinely looks machine-generated.
+
+Respond with ONE line only, in exactly this format:
+<clean|suspicious> — <one short reason, max 15 words>
+
+Examples:
+clean — natural variation, contractions, some terse replies
+suspicious — uniformly polished, heavy bullet lists, templated empathy throughout
+"""
 
 # Used by enrich_v9_metadata.py to populate the new v9 fields in existing cases.
 V9_METADATA_ENRICHMENT_PROMPT = """You are enriching a CSAT training case JSON with v9 metadata fields.
