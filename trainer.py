@@ -34,6 +34,7 @@ from prompts import (
     OPS_TEAM_SYSTEM_PROMPT,
     IT_TEAM_SYSTEM_PROMPT,
     REFUND_POLICY_RULES,
+    ANTICHEAT_SYSTEM_PROMPT,
     detect_internal_note_addressee,
 )
 
@@ -313,11 +314,60 @@ def advance_to_next_case(verdict):
 # LLM calls (unchanged from v9.2)
 # ============================================================================
 
+def get_anticheat_verdict(client, agent_texts):
+    """v9.7: One post-session LLM call. Returns a short stylistic verdict string
+    like 'clean — ...' or 'suspicious — ...'. Never raises to the caller."""
+    texts = [t for t in (agent_texts or []) if t and t.strip()]
+    if not texts:
+        return ''
+    joined = '\n---\n'.join(texts)
+    try:
+        resp = client.messages.create(
+            model=CLAUDE_MODEL,
+            max_tokens=80,
+            system=ANTICHEAT_SYSTEM_PROMPT,
+            messages=[{
+                'role': 'user',
+                'content': f"Agent's replies from the session (separated by ---):\n\n{joined}\n\nGive your one-line verdict now.",
+            }],
+        )
+        return resp.content[0].text.strip()
+    except Exception:
+        return ''
+
+
 def get_customer_reply(client, case_data, conversation):
     profile = case_data['customer_profile']
+
+    # v9.7: make the customer aware of their booking reference(s). For the
+    # duplicate-charge case (two bookings), spell out both IDs so the bot stays
+    # consistent when the agent says which one was cancelled/refunded.
+    booking_id = case_data.get('booking_id')
+    secondary = case_data.get('secondary_booking_id')
+    if secondary:
+        booking_awareness = (
+            "\nYOUR BOOKINGS — IMPORTANT:\n"
+            f"You have TWO bookings for this same trip because of the duplicate charge:\n"
+            f"- Booking {booking_id} (your first booking)\n"
+            f"- Booking {secondary} (the duplicate you made believing the first had failed)\n"
+            "Both were charged to your card. If the agent tells you they have cancelled or "
+            "refunded ONE of these bookings, accept it and remember WHICH number they cancelled "
+            "and which one stays active — refer to them consistently by number and do not mix "
+            "them up. It's fine for the agent to cancel/refund either one and keep the other; "
+            "you just need to be told clearly which is which."
+        )
+    elif booking_id:
+        booking_awareness = (
+            f"\nYOUR BOOKING REFERENCE: {booking_id}. "
+            "Refer to it consistently if the agent mentions it."
+        )
+    else:
+        booking_awareness = ""
+
     system = CLIENT_SYSTEM_PROMPT.format(
         customer_name=case_data.get('customer_name', 'Customer'),
         situation=profile['situation'],
+        booking_awareness=booking_awareness,
         emotional_state=profile['emotional_state'],
         personality_notes=profile['personality_notes'],
         case_language=case_data['case_language'],
@@ -544,6 +594,8 @@ def log_session(case_data, agent_email, agent_name, conversation, verdict, feedb
     # v9.7: also append a compact row to Google Sheets (for the manager
     # dashboard). Wrapped so a Sheets outage NEVER breaks case completion —
     # the local CSV above is always written first as the source of truth.
+    if sheets_log is None:
+        st.error('DIAG: sheets_log module did not import (import failed at startup).')
     if sheets_log is not None:
         try:
             csat = verdict.get('csat_score') or 0
@@ -562,6 +614,17 @@ def log_session(case_data, agent_email, agent_name, conversation, verdict, feedb
             gaps = verdict.get('key_gaps', []) or []
             key_gaps_str = '; '.join(str(g) for g in gaps)
 
+            # v9.7: anti-cheat runs ONCE, after the LAST case of the session.
+            # Stylistic AI-detection over the agent's own writing. Result goes
+            # to the sheet only — never shown to the person taking the training.
+            anti_cheat = ''
+            queue_len = len(st.session_state.get('case_queue', []))
+            is_last_case = case_index >= (queue_len - 1) if queue_len else True
+            if is_last_case:
+                anti_cheat = get_anticheat_verdict(
+                    get_client(), st.session_state.get('all_agent_texts', [])
+                )
+
             sheets_log.append_session_row({
                 'timestamp': dt.datetime.now(dt.timezone.utc).isoformat(timespec='seconds'),
                 'session_id': st.session_state.get('session_id', ''),
@@ -573,12 +636,15 @@ def log_session(case_data, agent_email, agent_name, conversation, verdict, feedb
                 'key_gaps': key_gaps_str,
                 'turn_count': agent_turns,
                 'duration_sec': duration_sec,
-                'anti_cheat_verdict': '',  # filled by a later patch (anti-cheat)
+                'anti_cheat_verdict': anti_cheat,  # only on the last case
                 'app_version': APP_VERSION,
             })
         except Exception as e:
-            # Surface a quiet warning but keep the session going.
-            st.warning(f'(Sheets logging skipped: {e})')
+            # DIAG (temporary): show the full error on screen so we can see
+            # why Cloud can't reach Sheets. Revert to a quiet warning after.
+            import traceback
+            st.error(f'DIAG Sheets error: {type(e).__name__}: {e}')
+            st.code(traceback.format_exc())
 
 
 # ============================================================================
@@ -687,6 +753,7 @@ if phase == 'auth':
                 start += 1
             st.session_state.current_case_index = start
             st.session_state.all_verdicts = []
+            st.session_state.all_agent_texts = []  # v9.7: for post-session anti-cheat
             st.session_state.phase = 'rules'
             st.rerun()
     st.stop()
@@ -1251,6 +1318,9 @@ with col_main:
         st.session_state.pending_reply = agent_reply
         st.session_state.pending_mode = mode
         st.session_state.is_processing = True
+        # v9.7: collect agent's own writing across the whole session for the
+        # post-session anti-cheat style check.
+        st.session_state.setdefault('all_agent_texts', []).append(agent_reply)
         st.rerun()
 
     # Phase 2: a reply is queued and the Send button above is now disabled —
