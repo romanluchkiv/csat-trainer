@@ -566,36 +566,39 @@ def _is_duplicate_submission(reply):
 
 
 def log_session(case_data, agent_email, agent_name, conversation, verdict, feedback_log, started_at, case_index):
-    is_new = not LOG_FILE.exists()
-    with LOG_FILE.open('a', newline='', encoding='utf-8') as f:
-        writer = csv.writer(f)
-        if is_new:
+    print(f'DIAG: log_session called for case_index={case_index}, email={agent_email}', flush=True)
+    try:
+        is_new = not LOG_FILE.exists()
+        with LOG_FILE.open('a', newline='', encoding='utf-8') as f:
+            writer = csv.writer(f)
+            if is_new:
+                writer.writerow([
+                    'timestamp', 'agent_email', 'agent_name', 'case_index',
+                    'case_title', 'source_ticket_id',
+                    'csat_score', 'resolution_status', 'emotional_ack_passed',
+                    'turn_count', 'verdict_summary',
+                    'conversation_json', 'feedback_json', 'full_verdict_json',
+                ])
             writer.writerow([
-                'timestamp', 'agent_email', 'agent_name', 'case_index',
-                'case_title', 'source_ticket_id',
-                'csat_score', 'resolution_status', 'emotional_ack_passed',
-                'turn_count', 'verdict_summary',
-                'conversation_json', 'feedback_json', 'full_verdict_json',
+                started_at, agent_email, agent_name, case_index,
+                case_data.get('case_title'),
+                case_data.get('source_ticket_id'),
+                verdict.get('csat_score'),
+                verdict.get('resolution_status'),
+                _ea_passed(verdict),
+                len([t for t in conversation if t['role'].startswith('agent')]),
+                verdict.get('verdict_for_agent', ''),
+                json.dumps(conversation, ensure_ascii=False),
+                json.dumps(feedback_log, ensure_ascii=False),
+                json.dumps(verdict, ensure_ascii=False),
             ])
-        writer.writerow([
-            started_at, agent_email, agent_name, case_index,
-            case_data.get('case_title'),
-            case_data.get('source_ticket_id'),
-            verdict.get('csat_score'),
-            verdict.get('resolution_status'),
-            _ea_passed(verdict),
-            len([t for t in conversation if t['role'].startswith('agent')]),
-            verdict.get('verdict_for_agent', ''),
-            json.dumps(conversation, ensure_ascii=False),
-            json.dumps(feedback_log, ensure_ascii=False),
-            json.dumps(verdict, ensure_ascii=False),
-        ])
+        print('DIAG: local CSV written OK', flush=True)
+    except Exception as e:
+        print(f'DIAG: local CSV write FAILED: {type(e).__name__}: {e}', flush=True)
 
     # v9.7: also append a compact row to Google Sheets (for the manager
-    # dashboard). Wrapped so a Sheets outage NEVER breaks case completion —
-    # the local CSV above is always written first as the source of truth.
-    if sheets_log is None:
-        st.error('DIAG: sheets_log module did not import (import failed at startup).')
+    # dashboard). Wrapped so a Sheets outage NEVER breaks case completion.
+    print(f'DIAG: sheets_log is {"None (import failed)" if sheets_log is None else "loaded"}', flush=True)
     if sheets_log is not None:
         try:
             csat = verdict.get('csat_score') or 0
@@ -640,11 +643,10 @@ def log_session(case_data, agent_email, agent_name, conversation, verdict, feedb
                 'app_version': APP_VERSION,
             })
         except Exception as e:
-            # DIAG (temporary): show the full error on screen so we can see
-            # why Cloud can't reach Sheets. Revert to a quiet warning after.
+            # DIAG (temporary): print full error to stdout so Cloud logs capture it.
             import traceback
-            st.error(f'DIAG Sheets error: {type(e).__name__}: {e}')
-            st.code(traceback.format_exc())
+            print(f'DIAG: Sheets append FAILED: {type(e).__name__}: {e}', flush=True)
+            traceback.print_exc()
 
 
 # ============================================================================
