@@ -74,7 +74,10 @@
     "booking_status": "confirmed",
     "refund_policy": "Non-refundable per operator policy",
     "customer_country": "Vietnam",
-    "additional_notes": "Customer dropped at 106 Phong Chau instead of Nha Trang. Took Grab out of pocket. Emergency hotline numbers unanswered. Customer has photo evidence and Grab receipt. Lunar New Year peak period."
+    "additional_notes": "Customer dropped at 106 Phong Chau instead of Nha Trang. Took Grab out of pocket. Emergency hotline numbers unanswered. Customer has photo evidence and Grab receipt. Lunar New Year peak period.",
+    "passenger_count": 1,
+    "net_price": "1,275,000 VND",
+    "system_fee": "225,000 VND"
   },
   "applicable_tou_clauses": [
     4
@@ -84,5 +87,7 @@
   "pickup_address": "Mui Ne Hills Budget Hotel, 88 Nguyen Dinh Chieu, Mui Ne",
   "dropoff_address": "Sunrise Nha Trang Beach Hotel, 12 Tran Phu Boulevard, Nha Trang",
   "confirmation_type": "instant",
-  "it_context": ""
+  "it_context": "",
+  "reassign_expected": false,
+  "reassign_rationale": "This is a routine wrong-dropoff service complaint (clause 4). Agent should handle directly: investigate operator's claims, validate customer evidence, refund the Grab fee + optional promo code. Reassigning to managers is an unnecessary delegation; agents are expected to resolve this themselves."
 }

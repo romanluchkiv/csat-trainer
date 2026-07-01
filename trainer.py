@@ -19,6 +19,7 @@ consistency in customer LLM, attachment markers in follow-ups, etc.
 import os
 import json
 import csv
+import uuid
 import datetime as dt
 from pathlib import Path
 
@@ -58,6 +59,16 @@ RULES_FILE = BASE / 'rules.md'
 
 BRAND_GREEN = '#5DBE3F'
 LOGO_PATH = BASE / '12go_logo.jpg'
+
+# v9.7: app version stamped into every logged row
+APP_VERSION = 'v9.7'
+
+# v9.7: Google Sheets logging. Imported defensively so the app still runs
+# locally even if gspread isn't installed yet or secrets aren't configured.
+try:
+    import sheets_log
+except Exception:
+    sheets_log = None
 
 
 # ============================================================================
@@ -102,6 +113,10 @@ def resolve_date_tokens(value):
         if m:
             tomorrow = today + dt.timedelta(days=1)
             return fmt(tomorrow.replace(hour=int(m.group(1))))
+        # v9.7: IN_HOURS_N = exactly N hours from *now* (for <24h urgency cases)
+        m = re.match(r'^IN_HOURS_(\d+)$', tok)
+        if m:
+            return fmt(now + dt.timedelta(hours=int(m.group(1))))
         return match.group(0)
 
     return re.sub(r'\{\{([A-Z0-9_]+)\}\}', replace_token, value)
@@ -169,6 +184,28 @@ def load_roster():
     return out
 
 
+def load_roles():
+    """v9.7: Return dict email → role from the optional 3rd column of the roster.
+
+    Roster line format (role is optional, backward compatible):
+        email,Full Name              -> role = ''
+        email,Full Name,manager      -> role = 'manager'
+    """
+    out = {}
+    if not ROSTER_FILE.exists():
+        return out
+    with ROSTER_FILE.open('r', encoding='utf-8') as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith('#'):
+                continue
+            parts = line.split(',')
+            if len(parts) >= 3:
+                email = parts[0].strip().lower()
+                out[email] = parts[2].strip().lower()
+    return out
+
+
 def load_rules_text():
     if RULES_FILE.exists():
         return RULES_FILE.read_text(encoding='utf-8')
@@ -233,6 +270,9 @@ def init_case_state(case_data):
     st.session_state.case_complete = False
     st.session_state.feedback_log = []
     st.session_state.reply_mode = 'public'
+    # v9.7: guard against double-clicking Send while a reply is being processed
+    st.session_state.is_processing = False
+    st.session_state.pending_reply = None
     # v9.6: action buttons
     st.session_state.refund_processed = False
     st.session_state.reassigned = False
@@ -245,15 +285,26 @@ def init_case_state(case_data):
 def advance_to_next_case(verdict):
     """Store the verdict, increment index, decide next phase."""
     st.session_state.all_verdicts.append(verdict)
+    # v9.7: mark this case complete and skip any already-completed cases
+    done = st.session_state.get('completed_case_ids', set())
+    done.add(st.session_state.current_case_index + 1)
+    st.session_state.completed_case_ids = done
+
     st.session_state.current_case_index += 1
-    if st.session_state.current_case_index >= len(st.session_state.case_queue):
+    total = len(st.session_state.case_queue)
+    while (st.session_state.current_case_index < total
+           and (st.session_state.current_case_index + 1) in done):
+        st.session_state.current_case_index += 1
+
+    if st.session_state.current_case_index >= total:
         st.session_state.phase = 'complete'
     else:
         st.session_state.phase = 'between_cases'
     # Clear per-case state
     for k in ('current_case', 'conversation', 'turn_count', 'internal_turn_count',
               'case_complete', 'feedback_log', 'reply_mode', 'session_started_at',
-              'refund_processed', 'reassigned', 'agent_clock'):
+              'refund_processed', 'reassigned', 'agent_clock', 'is_processing',
+              'pending_reply', 'pending_mode'):
         if k in st.session_state:
             del st.session_state[k]
 
@@ -449,6 +500,21 @@ def _ea_passed(verdict):
     return False
 
 
+def _is_duplicate_submission(reply):
+    """v9.7: True if the most recent agent turn (before any customer/ops/it
+    response) has identical content. Guards against a double-clicked Send
+    appending the same note/reply twice and dropping the partner's response.
+    """
+    reply_norm = (reply or '').strip()
+    for turn in reversed(st.session_state.get('conversation', [])):
+        role = turn.get('role', '')
+        if role in ('agent_public', 'agent_internal'):
+            return turn.get('content', '').strip() == reply_norm
+        if role in ('customer', 'ops', 'it'):
+            return False
+    return False
+
+
 def log_session(case_data, agent_email, agent_name, conversation, verdict, feedback_log, started_at, case_index):
     is_new = not LOG_FILE.exists()
     with LOG_FILE.open('a', newline='', encoding='utf-8') as f:
@@ -474,6 +540,45 @@ def log_session(case_data, agent_email, agent_name, conversation, verdict, feedb
             json.dumps(feedback_log, ensure_ascii=False),
             json.dumps(verdict, ensure_ascii=False),
         ])
+
+    # v9.7: also append a compact row to Google Sheets (for the manager
+    # dashboard). Wrapped so a Sheets outage NEVER breaks case completion —
+    # the local CSV above is always written first as the source of truth.
+    if sheets_log is not None:
+        try:
+            csat = verdict.get('csat_score') or 0
+            case_score_100 = round((csat / 5) * 100)
+            agent_turns = len([t for t in conversation if t['role'].startswith('agent')])
+
+            # duration in seconds from case start to now
+            duration_sec = ''
+            try:
+                start_dt = dt.datetime.fromisoformat(str(started_at).replace('Z', '+00:00'))
+                now_dt = dt.datetime.now(dt.timezone.utc)
+                duration_sec = int((now_dt - start_dt).total_seconds())
+            except Exception:
+                pass
+
+            gaps = verdict.get('key_gaps', []) or []
+            key_gaps_str = '; '.join(str(g) for g in gaps)
+
+            sheets_log.append_session_row({
+                'timestamp': dt.datetime.now(dt.timezone.utc).isoformat(timespec='seconds'),
+                'session_id': st.session_state.get('session_id', ''),
+                'email': agent_email,
+                'role': st.session_state.get('agent_role', ''),
+                'case_id': case_index + 1,  # case_index is 0-based; show 1-4
+                'csat_score': csat,
+                'case_score_100': case_score_100,
+                'key_gaps': key_gaps_str,
+                'turn_count': agent_turns,
+                'duration_sec': duration_sec,
+                'anti_cheat_verdict': '',  # filled by a later patch (anti-cheat)
+                'app_version': APP_VERSION,
+            })
+        except Exception as e:
+            # Surface a quiet warning but keep the session going.
+            st.warning(f'(Sheets logging skipped: {e})')
 
 
 # ============================================================================
@@ -532,16 +637,6 @@ if not ANTHROPIC_API_KEY:
 init_phase()
 phase = st.session_state.phase
 
-# v9.6 — Session persistence warning. Shown only inside an active case so it doesn't
-# clutter the auth/rules/complete screens. We DON'T have server-side state persistence
-# yet (planned for v9.7 with Google Sheets), so a refresh/idle/lunch-out will lose progress.
-if phase == 'in_case':
-    st.warning(
-        '⚠️ **Don\'t refresh, close the tab, or step away for more than ~10 minutes.** '
-        'Your case progress is held in your browser session only — if it drops, you\'ll have to restart this case from the beginning.',
-        icon='⚠️',
-    )
-
 
 # ----- PHASE: auth -----
 if phase == 'auth':
@@ -561,24 +656,65 @@ if phase == 'auth':
         else:
             st.session_state.agent_email = email_clean
             st.session_state.agent_name = roster[email_clean]
+            # v9.7: unique id for this whole attempt (groups the 4 case rows)
+            st.session_state.session_id = uuid.uuid4().hex[:8]
+            # v9.7: role from roster 3rd column (defaults to '' if not present)
+            st.session_state.agent_role = load_roles().get(email_clean, '')
             cases = load_cases()
             if not cases:
                 st.error('No cases found in /cases — contact your administrator.')
                 st.stop()
             st.session_state.case_queue = cases
-            st.session_state.current_case_index = 0
+            total_cases_n = len(cases)
+
+            # v9.7: resume — which cases has this email already completed?
+            completed = set()
+            if sheets_log is not None:
+                try:
+                    completed = sheets_log.get_completed_case_ids(email_clean)
+                except Exception:
+                    completed = set()
+            st.session_state.completed_case_ids = completed
+
+            # All cases already done -> show the "training complete" screen.
+            if len([c for c in completed if 1 <= c <= total_cases_n]) >= total_cases_n:
+                st.session_state.phase = 'already_done'
+                st.rerun()
+
+            # Otherwise start at the first uncompleted case.
+            start = 0
+            while start < total_cases_n and (start + 1) in completed:
+                start += 1
+            st.session_state.current_case_index = start
             st.session_state.all_verdicts = []
             st.session_state.phase = 'rules'
             st.rerun()
     st.stop()
 
 
+# ----- PHASE: already_done (all cases completed in a previous session) -----
+if phase == 'already_done':
+    st.markdown('## ✅ Training complete')
+    st.markdown(
+        f"**{st.session_state.agent_name}**, you've already completed all cases "
+        'in this simulator. Your results are saved.'
+    )
+    st.info('If you need to retake the training, please contact your manager.')
+    st.stop()
+
+
 # ----- PHASE: rules -----
 if phase == 'rules':
+    idx = st.session_state.current_case_index
+    completed = st.session_state.get('completed_case_ids', set())
     st.markdown(f'### Hello, {st.session_state.agent_name}')
+    if completed:
+        st.info(f'Welcome back — you already completed {len(completed)} case(s). '
+                f'Continuing from Case {idx + 1}.')
     st.markdown(load_rules_text())
-    if st.button('Start Case 1', type='primary'):
-        case_data = st.session_state.case_queue[0]['data']
+    btn_label = f'Resume at Case {idx + 1}' if completed else f'Start Case {idx + 1}'
+    if st.button(btn_label, type='primary'):
+        case_data = st.session_state.case_queue[idx]['data']
         init_case_state(case_data)
         st.session_state.phase = 'in_case'
         st.rerun()
@@ -744,6 +880,20 @@ col_main, col_info = st.columns([2.4, 1])
 with col_info:
     st.markdown('#### Booking information')
     bf = case.get('booking_facts', {})
+    # v9.7: for the duplicate-payment case, show the payment log at the TOP —
+    # it's the key diagnostic info for that case. Only renders if present.
+    pay_log = case.get('payment_log') or []
+    if pay_log:
+        st.markdown('**🧾 Payment log**')
+        for entry in pay_log:
+            st.markdown(
+                f"`{entry.get('booking_id','?')}` — {entry.get('amount','?')} — "
+                f"{entry.get('status','?')}<br>"
+                f"&nbsp;&nbsp;paid at {entry.get('paid_at','?')}, ticket sent at {entry.get('ticket_sent_at','?')}<br>"
+                f"&nbsp;&nbsp;<em>{entry.get('note','')}</em>",
+                unsafe_allow_html=True,
+            )
+        st.markdown('---')
     st.markdown(f"**Booking ID:** {case.get('booking_id', 'N/A')}")
     if case.get('secondary_booking_id'):
         st.markdown(f"**Secondary booking ID:** {case.get('secondary_booking_id')} _(duplicate)_")
@@ -772,19 +922,6 @@ with col_info:
     st.markdown(f"**Refund policy:** {bf.get('refund_policy', 'N/A')}")
     if bf.get('customer_country'):
         st.markdown(f"**Customer country:** {bf['customer_country']}")
-    # Payment log (Case 4 — duplicate-payment diagnostic info)
-    pay_log = case.get('payment_log') or []
-    if pay_log:
-        st.markdown('---')
-        st.markdown('**🧾 Payment log**')
-        for entry in pay_log:
-            st.markdown(
-                f"`{entry.get('booking_id','?')}` — {entry.get('amount','?')} — "
-                f"{entry.get('status','?')}<br>"
-                f"&nbsp;&nbsp;paid at {entry.get('paid_at','?')}, ticket sent at {entry.get('ticket_sent_at','?')}<br>"
-                f"&nbsp;&nbsp;<em>{entry.get('note','')}</em>",
-                unsafe_allow_html=True,
-            )
 
     # ----- v9.6 ACTIONS panel (right column, below Booking Info) -----
     # Shown only inside an active case (not on between-cases / complete screens)
@@ -1095,10 +1232,32 @@ with col_main:
         height=140,
         label_visibility='collapsed',
     )
-    send_clicked = st.button('Send ▶', type='primary', key=f'send_{input_key}')
+    send_clicked = st.button(
+        'Send ▶', type='primary', key=f'send_{input_key}',
+        disabled=st.session_state.get('is_processing', False),
+    )
     agent_reply = agent_reply_text.strip() if (send_clicked and agent_reply_text and agent_reply_text.strip()) else None
 
+    # v9.7: drop a duplicate submission from a double-clicked Send.
+    if agent_reply and _is_duplicate_submission(agent_reply):
+        agent_reply = None
+
     if agent_reply:
+        # v9.7b: two-phase submit. Don't run the LLM inline — queue the reply,
+        # flip the processing flag, and rerun so the Send button re-renders
+        # DISABLED before the slow call starts. A second click then lands on a
+        # disabled button and can't interrupt the in-flight response (which was
+        # the cause of lost Ops/IT replies).
+        st.session_state.pending_reply = agent_reply
+        st.session_state.pending_mode = mode
+        st.session_state.is_processing = True
+        st.rerun()
+
+    # Phase 2: a reply is queued and the Send button above is now disabled —
+    # safe to do the slow LLM work here without risk of interruption.
+    if st.session_state.get('pending_reply'):
+        agent_reply = st.session_state.pending_reply
+        mode = st.session_state.pending_mode
         client = get_client()
 
         if mode == 'internal':
@@ -1138,6 +1297,8 @@ with col_main:
             if st.session_state.internal_turn_count >= max_internal_turns:
                 st.warning(f'Internal note limit reached ({max_internal_turns}). Continue with public replies.')
 
+            st.session_state.pending_reply = None
+            st.session_state.is_processing = False
             st.rerun()
 
         else:  # public
@@ -1164,6 +1325,8 @@ with col_main:
                         st.session_state.session_started_at,
                         case_idx,
                     )
+                st.session_state.pending_reply = None
+                st.session_state.is_processing = False
                 st.rerun()
 
             with st.spinner('Customer is typing...'):
@@ -1201,4 +1364,6 @@ with col_main:
                     'timestamp': customer_ts,
                 })
 
+            st.session_state.pending_reply = None
+            st.session_state.is_processing = False
             st.rerun()

@@ -1,13 +1,34 @@
-# Agent roster — one entry per line: email,Full Name
+# Agent roster — one entry per line: email,Full Name,role
+# role is one of: admin | manager | agent
 # Lines starting with # are ignored.
 # Edit this file to add your team. Restart Streamlit after editing.
 
-roman.luchkiv@12go.asia,Roman
-volodymyr.krokhmalnyi@12go.asia,Volodymyr
-paul.sidun@12go.asia,Paul
-antea.kuduz@traveling.com,Antea
-karn.krachaechan@12go.asia,Karn
-sunny.trakanta@12go.asia,Sunny
-belissa.d@bookaway.com,Belissa
-lara.b@bookaway.com,Lara
-catherine.c@bookaway.com,Cath
+roman.luchkiv@12go.asia,Roman,admin
+volodymyr.krokhmalnyi@12go.asia,Volodymyr,admin
+paul.sidun@12go.asia,Paul,admin
+antea.kuduz@traveling.com,Antea,manager
+karn.krachaechan@12go.asia,Karn,manager
+sunny.trakanta@12go.asia,Sunny,manager
+belissa.d@bookaway.com,Belissa,manager
+lara.b@bookaway.com,Lara,manager
+catherine.c@bookaway.com,Cath,manager
+mint.hathairat@12go.asia,Mint,agent
+sutapat.singtokaew@12go.asia,Song,agent
+noy.kanokpron@12go.asia,Noy,agent
+chris.christopher@12go.asia,Chris,agent
+hatai.bunnag@12go.asia,Jimmy,agent
+carl.lara@12go.asia,Carl,agent
+ardana.neswari@12go.asia,Ardana,agent
+dita.yunita@12go.asia,Dita,agent
+sofiia.marynchenko@12go.asia,Sofiia,agent
+gegi.labadze@12go.asia,Gegi,agent
+saba.takadze@12go.asia,Saba,agent
+pramot.kongkoon@12go.asia,Teddy,agent
+panuwat.hitarat@12go.asia,Save,agent
+nesara.hitarat@12go.asia,Psy,agent
+yaowarin.sripila@12go.asia,Toey,agent
+danielle.l@bookaway.com,Dani,agent
+danajah.wichai@12go.asia,Dawk-Yah,agent
+rachain.lee-asan@12go.asia,Rachain,agent
+abdelrahman.elnssr@12go.asia,Adel,agent
+anja.kekez@12go.asia,Anja,agent

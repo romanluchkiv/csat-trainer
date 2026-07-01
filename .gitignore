@@ -23,3 +23,5 @@ Thumbs.db
 .vscode/
 .idea/
 *.swp
+.streamlit/secrets.toml
+csat-trainer-*.json

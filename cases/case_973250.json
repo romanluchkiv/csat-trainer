@@ -83,7 +83,10 @@
     "booking_status": "TWO confirmed bookings (duplicate); both charged to customer's card",
     "refund_policy": "Non-refundable per operator policy (exception possible only if IT confirms platform-side error)",
     "customer_country": "Philippines",
-    "additional_notes": "Customer claims website showed 'Something went wrong' error after first payment, causing them to rebook. Both bookings are confirmed and both payments were charged. Without IT verification of the error event, the agent cannot determine whether to process refund as an exception."
+    "additional_notes": "Customer claims website showed 'Something went wrong' error after first payment, causing them to rebook. Both bookings are confirmed and both payments were charged. Without IT verification of the error event, the agent cannot determine whether to process refund as an exception.",
+    "passenger_count": 1,
+    "net_price": "PHP 874 (per booking)",
+    "system_fee": "PHP 154 (per booking)"
   },
   "applicable_tou_clauses": [
     9
@@ -93,5 +96,26 @@
   "pickup_address": "Legazpi City Grand Terminal",
   "dropoff_address": "Cubao Bus Terminal, Manila",
   "confirmation_type": "instant",
-  "it_context": "Payment gateway logs show transaction 1 completed successfully at 14:23:18 but error handler triggered incorrectly, displaying 'Something went wrong' message to user despite successful booking confirmation. Second transaction processed at 14:26:42, only 3 minutes later, indicating user immediate retry behavior consistent with error-driven rebooking. IT confirms this was a 12Go-side error handler bug — both bookings are technically valid but the duplicate was caused by our platform misleading the user."
+  "it_context": "Payment gateway logs show transaction 1 completed successfully at 14:23:18 but error handler triggered incorrectly, displaying 'Something went wrong' message to user despite successful booking confirmation. Second transaction processed at 14:26:42, only 3 minutes later, indicating user immediate retry behavior consistent with error-driven rebooking. IT confirms this was a 12Go-side error handler bug — both bookings are technically valid but the duplicate was caused by our platform misleading the user.",
+  "secondary_booking_id": "9732502",
+  "payment_log": [
+    {
+      "booking_id": "9732501",
+      "amount": "PHP 1,028",
+      "status": "paid + confirmed",
+      "paid_at": "14:23:18",
+      "ticket_sent_at": "14:23:21",
+      "note": "Payment success but UI showed 'Something went wrong' error to customer"
+    },
+    {
+      "booking_id": "9732502",
+      "amount": "PHP 1,028",
+      "status": "paid + confirmed",
+      "paid_at": "14:26:42",
+      "ticket_sent_at": "14:26:45",
+      "note": "Customer retry — booked second time believing first failed"
+    }
+  ],
+  "reassign_expected": false,
+  "reassign_rationale": "This requires IT escalation to verify the platform-side error, then agent processes refund as an exception. Reassigning to CS Managers skips the diagnostic path (IT verification of error logs) and is not the correct routing. CS Managers don't have IT access either — this is an agent-handled case with IT support."
 }

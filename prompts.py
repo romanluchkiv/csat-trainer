@@ -403,9 +403,13 @@ JUDGE_TOOL_SCHEMA = {
                     "explanation": {
                         "type": "string",
                         "description": "1 sentence explaining the verdict. E.g. 'Opened with empathy and apology before process.' or 'First reply began with policy citation; no acknowledgment of customer's distress.'"
+                    },
+                    "suggested_acknowledgment": {
+                        "type": "string",
+                        "description": "REQUIRED when passed=False: a concrete example sentence the agent could have used to acknowledge the customer's emotion in the first reply. Make it specific to this case's customer name and situation. E.g. 'I completely understand how stressful this must be with under 24 hours to go — let me check with the operator immediately.' Leave empty string if passed=True."
                     }
                 },
-                "required": ["passed", "explanation"]
+                "required": ["passed", "explanation", "suggested_acknowledgment"]
             },
             "tou_clauses_referenced": {
                 "type": "array",
@@ -454,6 +458,34 @@ JUDGE_TOOL_SCHEMA = {
                     "required": ["turn_number", "turn_type", "agent_text_summary", "what_worked", "what_to_improve"]
                 },
                 "description": "Per-turn breakdown of agent's replies. One entry per agent turn (both public and internal)."
+            },
+            "agent_actions": {
+                "type": "object",
+                "description": "Evaluation of action-button events (refund and reassign) the agent took during this case. Fill all fields based on the transcript and the case's expectations.",
+                "properties": {
+                    "refund_pressed": {
+                        "type": "boolean",
+                        "description": "True if the agent clicked the Refund button (look for '[REFUND PROCESSED' marker in transcript)."
+                    },
+                    "refund_timing": {
+                        "type": "string",
+                        "enum": ["correct", "premature", "late", "wrong_amount", "not_applicable"],
+                        "description": "If refund_pressed: 'correct' if right time and right amount per applicable ToU clause; 'premature' if before required verification (e.g. Case 4 needs IT confirmation first); 'late' if after customer escalated; 'wrong_amount' if full refund issued when only partial was due (e.g. Case 2 clause 4 — only Grab fee, not full booking). If refund_pressed=false, use 'not_applicable'."
+                    },
+                    "refund_evaluation": {
+                        "type": "string",
+                        "description": "1-2 sentences explaining the refund decision. If refund_pressed=false but should have been pressed, note it here too. Empty string if refund_pressed=false AND not expected."
+                    },
+                    "reassigned": {
+                        "type": "boolean",
+                        "description": "True if the agent clicked the Reassign-to-CS-Managers button (look for '[CASE REASSIGNED' marker in transcript)."
+                    },
+                    "reassign_evaluation": {
+                        "type": "string",
+                        "description": "1-2 sentences. If reassigned=True and reassign_expected=True for this case → positive (correct delegation, e.g. safety case). If reassigned=True and reassign_expected=False → negative (avoidable escalation, broken-promise pattern). If reassigned=False → empty string."
+                    }
+                },
+                "required": ["refund_pressed", "refund_timing", "refund_evaluation", "reassigned", "reassign_evaluation"]
             }
         },
         "required": [
@@ -462,7 +494,7 @@ JUDGE_TOOL_SCHEMA = {
             "tou_clauses_referenced", "phrase_repetition_flagged",
             "red_flag_phrases_used", "internal_process_followed",
             "resolution_status", "promises_kept", "promises_broken",
-            "per_turn_review"
+            "per_turn_review", "agent_actions"
         ]
     }
 }
@@ -482,6 +514,10 @@ RED FLAG PHRASES the agent should have avoided:
 
 INTERNAL PROCESS STEPS the agent should have considered:
 {internal_process_gaps}
+
+REASSIGN-TO-CS-MANAGERS — context for this case:
+- reassign_expected = {reassign_expected}
+- rationale = {reassign_rationale}
 
 EVALUATION CRITERIA:
 - Emotional acknowledgment in the FIRST agent reply is a major positive. Process-first / policy-first opening without empathy is a major negative.
@@ -506,6 +542,26 @@ v9.2 SOP RULES (12Go-specific, flag violations in key_gaps):
 (F) PROMO CODE OPTION — for complaint cases (especially wrong drop-off under clause 4), the agent may offer a promo code as goodwill — and this can be done BEFORE or INSTEAD of issuing a refund. If the agent never considers a promo code where appropriate, this is a missed opportunity (mention in key_gaps as a minor item, not major).
 
 (G) NO FAKE MANAGER ESCALATION — for wrong drop-off cases (clause 4), real 12Go SOP is for the CS agent to HOLD the position firmly: Grab fee refund + optional promo code. There is no "manager escalation queue" the agent can promise. If the agent tells the customer "I'm escalating to my manager" or "I'll have my supervisor review this" or "senior review", that is a BROKEN PROMISE — flag it in key_gaps and promises_broken. The correct posture is to hold firm on the policy, acknowledge the customer's frustration, and offer the best goodwill the agent can authorize themselves. (Exception: for genuinely complex cases beyond clause 4 — e.g. clause 6 safety + significant property damage — internal escalation to a senior is realistic and not a fake promise.)
+
+v9.6 ACTION-BUTTON RULES (NEW):
+
+(H) EMOTIONAL ACKNOWLEDGMENT — when emotional_acknowledgment.passed=False, you MUST fill the suggested_acknowledgment field with a concrete example sentence the agent could have used. Make it specific to this case's customer name and emotional state. Use the customer's name from the case. Examples:
+  - For an anxious customer with an urgent <24h issue: "I completely understand how stressful this must be with under 24 hours to go — let me check with the operator immediately and we'll find a way to get you sorted."
+  - For an angry safety-complaint customer: "I'm so sorry you went through this — what you describe is completely unacceptable, and your safety is our priority. Let me get a senior involved right away."
+  - For a frustrated wrong-dropoff customer: "I'm really sorry — being dropped at the wrong place after a long journey is awful, and your evidence makes the situation very clear. Let me look into this right now."
+The example should be 1-2 sentences, named to the customer, and should sound like something a real CS agent would write.
+
+(I) REFUND BUTTON — agents can now click a Refund button which records "[REFUND PROCESSED: amount, booking_id, at turn N]" in the transcript. When evaluating:
+  - Case 1 (Egypt safety / clauses 3,7): Full refund is appropriate — but ONLY after the agent has demonstrated understanding of the safety severity and acknowledged the customer. A pure "refund-and-done" with no empathy is still a low CSAT.
+  - Case 2 (Vietnam wrong-dropoff / clause 4): FULL refund is WRONG. Clause 4 only authorises Grab/taxi fee refund + optional promo. Pressing the full Refund button = wrong_amount.
+  - Case 3 (Vietnam unconfirmed / clause 8): Full refund is correct when operator cannot confirm in time. Should be processed proactively, not after customer escalates twice.
+  - Case 4 (Philippines double payment / clause 9 exception): Refund is correct ONLY AFTER IT has confirmed the platform-side error in an internal note. Pressing refund before IT confirms = premature.
+  - If refund was needed but agent never pressed → note in refund_evaluation that the agent should have pressed the button.
+
+(J) REASSIGN-TO-CS-MANAGERS BUTTON — agents can now click a Reassign button which records "[CASE REASSIGNED to CS Managers at turn N]" in the transcript and ends the case immediately. When evaluating:
+  - Case 1 (Egypt safety + legal threats): reassign_expected=True → correct delegation. Positive verdict.
+  - Cases 2, 3, 4: reassign_expected=False → avoidance/broken-promise pattern. The agent had the tools and authority to handle these. Negative verdict in reassign_evaluation, AND this should hit csat_score and key_gaps.
+  - A reassign that happens AFTER the agent already promised the customer something is also a broken promise (they took action different from their word).
 
 YOUR JOB: Use the submit_csat_verdict tool to record your verdict. Fill EVERY required field. Be specific and quote evidence where possible.
 """

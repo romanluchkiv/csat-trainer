@@ -86,7 +86,10 @@
     "booking_status": "confirmed",
     "refund_policy": "Non-refundable per operator policy",
     "customer_country": "Egypt",
-    "additional_notes": "Customer alleges severe safety violations during journey (reckless driving, smoking driver, unsafe stops). Booking confusion: customer claims they originally tried to book Cairo → Sharm El Sheikh. Complaint open 5+ months with 10+ different agents."
+    "additional_notes": "Customer alleges severe safety violations during journey (reckless driving, smoking driver, unsafe stops). Booking confusion: customer claims they originally tried to book Cairo → Sharm El Sheikh. Complaint open 5+ months with 10+ different agents.",
+    "passenger_count": 1,
+    "net_price": "€85",
+    "system_fee": "€15"
   },
   "applicable_tou_clauses": [
     3,
@@ -97,5 +100,7 @@
   "pickup_address": "Hilton Hurghada Resort, Corniche Road, Hurghada",
   "dropoff_address": "Sharm El Sheikh Bus Station, Peace Road, Sharm El Sheikh",
   "confirmation_type": "instant",
-  "it_context": ""
+  "it_context": "",
+  "reassign_expected": true,
+  "reassign_rationale": "Customer alleges serious safety violations, threatens legal action and public reviews. This case warrants senior/manager escalation due to reputational and legal risk. Reassigning to CS Managers is the correct delegation."
 }

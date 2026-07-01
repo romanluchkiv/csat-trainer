@@ -56,7 +56,7 @@
   "source_ticket_id": 784988,
   "source_csat_score": "bad",
   "booking_facts": {
-    "departure_date": "{{TOMORROW_PLUS_HOURS_18}}",
+    "departure_date": "{{IN_HOURS_12}}",
     "duration_hours": 2.5,
     "total_price": "1,200 THB",
     "route": "Hanoi → Da Nang",
@@ -64,7 +64,10 @@
     "booking_status": "pending",
     "refund_policy": "Non-refundable per operator policy",
     "customer_country": "Vietnam",
-    "additional_notes": "Customer wrote in <24h before departure with booking still unconfirmed. Required urgent confirmation or refund to make alternative arrangements. Departure date has now passed without confirmation."
+    "additional_notes": "Customer wrote in <24h before departure with booking still unconfirmed. Departure is now ~12 hours away. Requires urgent confirmation or refund so the customer can make alternative arrangements in time.",
+    "passenger_count": 1,
+    "net_price": "1,020 THB",
+    "system_fee": "180 THB"
   },
   "applicable_tou_clauses": [],
   "customer_name": "Frances Mitchell",
@@ -72,5 +75,7 @@
   "pickup_address": "Hanoi Central Hotel, 44 Trang Tien Street, Hoan Kiem District, Hanoi",
   "dropoff_address": "Da Nang Beach Resort, 216 Vo Nguyen Giap Street, Son Tra District, Da Nang",
   "confirmation_type": "manual",
-  "it_context": ""
+  "it_context": "",
+  "reassign_expected": false,
+  "reassign_rationale": "This is an urgent <24h unconfirmed booking. Agent must act immediately: contact operator, escalate internally to Ops, and process refund if confirmation cannot be secured in time. Reassigning to managers wastes precious time and is a broken-promise/avoidance pattern — exactly the failure mode this case is designed to surface."
 }
