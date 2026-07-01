@@ -566,7 +566,6 @@ def _is_duplicate_submission(reply):
 
 
 def log_session(case_data, agent_email, agent_name, conversation, verdict, feedback_log, started_at, case_index):
-    print(f'DIAG: log_session called for case_index={case_index}, email={agent_email}', flush=True)
     try:
         is_new = not LOG_FILE.exists()
         with LOG_FILE.open('a', newline='', encoding='utf-8') as f:
@@ -592,13 +591,11 @@ def log_session(case_data, agent_email, agent_name, conversation, verdict, feedb
                 json.dumps(feedback_log, ensure_ascii=False),
                 json.dumps(verdict, ensure_ascii=False),
             ])
-        print('DIAG: local CSV written OK', flush=True)
-    except Exception as e:
-        print(f'DIAG: local CSV write FAILED: {type(e).__name__}: {e}', flush=True)
+    except Exception:
+        pass  # local CSV is best-effort; Sheets is the source of truth on Cloud
 
     # v9.7: also append a compact row to Google Sheets (for the manager
     # dashboard). Wrapped so a Sheets outage NEVER breaks case completion.
-    print(f'DIAG: sheets_log is {"None (import failed)" if sheets_log is None else "loaded"}', flush=True)
     if sheets_log is not None:
         try:
             csat = verdict.get('csat_score') or 0
@@ -615,7 +612,23 @@ def log_session(case_data, agent_email, agent_name, conversation, verdict, feedb
                 pass
 
             gaps = verdict.get('key_gaps', []) or []
-            key_gaps_str = '; '.join(str(g) for g in gaps)
+            # key_gaps should be a list of strings, but may arrive as JSON-encoded
+            # or with nested structures. Normalize to list of strings.
+            if isinstance(gaps, str):
+                try:
+                    gaps = json.loads(gaps)
+                except Exception:
+                    gaps = [gaps] if gaps else []
+            if not isinstance(gaps, list):
+                gaps = [str(gaps)] if gaps else []
+            # Flatten and stringify any nested structures
+            clean_gaps = []
+            for g in gaps:
+                if isinstance(g, (list, dict)):
+                    clean_gaps.append(json.dumps(g) if g else '')
+                else:
+                    clean_gaps.append(str(g) if g else '')
+            key_gaps_str = '; '.join(clean_gaps)
 
             # v9.7: anti-cheat runs ONCE, after the LAST case of the session.
             # Stylistic AI-detection over the agent's own writing. Result goes
@@ -642,11 +655,10 @@ def log_session(case_data, agent_email, agent_name, conversation, verdict, feedb
                 'anti_cheat_verdict': anti_cheat,  # only on the last case
                 'app_version': APP_VERSION,
             })
-        except Exception as e:
-            # DIAG (temporary): print full error to stdout so Cloud logs capture it.
-            import traceback
-            print(f'DIAG: Sheets append FAILED: {type(e).__name__}: {e}', flush=True)
-            traceback.print_exc()
+        except Exception:
+            # Sheets outage shouldn't break case completion. The local CSV
+            # is the source of truth anyway. Silently skip on error.
+            pass
 
 
 # ============================================================================
